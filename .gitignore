@@ -19,6 +19,11 @@ mlruns/
 
 # Qlib binary data
 qlib_data/
+qlib_source_data/*.csv
+
+# Generated data artifacts
+*_binance_data.csv
+lgbm_feature_importance*.csv
 
 # macOS
 .DS_Store
