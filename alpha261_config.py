@@ -12,10 +12,7 @@ def _zscore(expr: str, n: int) -> str:
 
 def _tr_expr() -> str:
     return (
-        "Greater("
-        "$high-$low,"
-        "Greater(Abs($high-Ref($close,1)),Abs($low-Ref($close,1)))"
-        ")"
+        "Greater($high-$low,Greater(Abs($high-Ref($close,1)),Abs($low-Ref($close,1))))"
     )
 
 
@@ -130,9 +127,7 @@ def _new_factor_exprs() -> List[Tuple[str, str]]:
     def chop(n: int) -> str:
         log_n = math.log(n)
         return (
-            "100*Log("
-            f"Sum({tr},{n})/(Max($high,{n})-Min($low,{n})+1e-12)"
-            f")/{log_n:.15f}"
+            f"100*Log(Sum({tr},{n})/(Max($high,{n})-Min($low,{n})+1e-12))/{log_n:.15f}"
         )
 
     def adx(n: int) -> str:
@@ -180,7 +175,7 @@ def _new_factor_exprs() -> List[Tuple[str, str]]:
     stf = f"(({buy_quote})-({sell_quote}))"
 
     # Funding updates every 8 hours; prefer window sizes divisible by 8.
-    fz72 = _zscore("$funding_rate", 72)    # 3 days
+    fz72 = _zscore("$funding_rate", 72)  # 3 days
     fz240 = _zscore("$funding_rate", 240)  # 10 days
     fund_pos = ind_pos("$funding_rate")
 
@@ -256,7 +251,6 @@ def _new_factor_exprs() -> List[Tuple[str, str]]:
         ("DDCUR60", ddcur(60)),
         ("SKEW60", skew(60)),
         ("KURT60", kurt(60)),
-
         # --- Order-flow (taker) derived factors ---
         ("BUY_BASE", buy_base),
         ("SELL_BASE", sell_base),
@@ -272,15 +266,12 @@ def _new_factor_exprs() -> List[Tuple[str, str]]:
         ("FMO72", f"Mean({ti},72)"),
         ("FA8_24", f"Mean({ti},8)-Mean({ti},24)"),
         ("FA24_72", f"Mean({ti},24)-Mean({ti},72)"),
-        
-        ("FRD72", f"({ti})-({_zscore(ret1,72)})"),
+        ("FRD72", f"({ti})-({_zscore(ret1, 72)})"),
         # This factor captures the divergence between trade flow and price movement. If the Taker Intensity (TI) is high while the Z-score of Returns remains low, it indicates the presence of a Hidden Liquidity Wall or significant passive selling pressure. This serves as a powerful signal for potential market tops."
         ("IMP", f"Abs({ret1})/($amount+1e-12)"),
         # This is a measure of Market Impact, representing the price change per unit of trading volume. A higher value indicates thinner liquidity, meaning the market is more fragile. In BTC timing, a sudden spike in IMP often foreshadows an expansion in volatility or a potential liquidity cascade."
-        
         ("ABNR", f"({ti})*({ind_neg(ret1)})"),
         ("ASPR", f"(0-({ti}))*({ind_pos(ret1)})"),
-
         # --- Funding rate factors ---
         ("FZ72", fz72),
         ("FZ240", fz240),
@@ -290,14 +281,13 @@ def _new_factor_exprs() -> List[Tuple[str, str]]:
         ("FCNT72", f"Sum({fund_pos},72)"),
         ("FCNT240", f"Sum({fund_pos},240)"),
         ("FFA72", f"({fz72})*({ti})"),
-        ("FRG5_72", f"({fz72})-({_zscore('Log($close/Ref($close,5))',72)})"),
-        ("FRG20_72", f"({fz72})-({_zscore('Log($close/Ref($close,20))',72)})"),
-
+        ("FRG5_72", f"({fz72})-({_zscore('Log($close/Ref($close,5))', 72)})"),
+        ("FRG20_72", f"({fz72})-({_zscore('Log($close/Ref($close,20))', 72)})"),
         # --- Composite / tradable structure factors ---
         ("BRK_FLOW20_8", f"{ind_pos('$close-Ref(Max($high,20),1)')}*Mean({ti},8)"),
         ("REV_CL", f"{ind_pos(f'({fz72})-1.5')}*{ind_neg(ti)}*({ret1})"),
         ("SQZ", f"{ind_pos(f'(0-({fz72})-1.5)')}*{ind_pos(f'Mean({ti},24)')}"),
-        ("LTT", f"{_zscore(f'Abs({ret1})/($amount+1e-12)',72)}*Sign(Mean({ret1},24))"),
+        ("LTT", f"{_zscore(f'Abs({ret1})/($amount+1e-12)', 72)}*Sign(Mean({ret1},24))"),
     ]
     return [(expr, name) for name, expr in exprs]
 
@@ -320,7 +310,53 @@ def get_alpha261_config() -> Tuple[List[str], List[str]]:
         exprs.append(expr)
 
     return exprs, names
-  
+
+
+def get_top23_config() -> Tuple[List[str], List[str]]:
+    expr_map = _alpha158_expr_map()
+    new_factors = {name: expr for expr, name in _new_factor_exprs()}
+
+    top23_names = [
+        "ADX14",
+        "ADX30",
+        "CHOP14",
+        "CHOP30",
+        "CORR20",
+        "FMO72",
+        "FRG20_72",
+        "FZ240",
+        "FZ72",
+        "GKVOL60",
+        "IMAX30",
+        "IMXD30",
+        "LOWSHADOW20",
+        "MDD60",
+        "NATR30",
+        "OBV20",
+        "PVT60",
+        "RV20",
+        "RV60",
+        "STD60",
+        "VOV60",
+        "VWAPDEV60",
+        "WVMA60",
+    ]
+
+    exprs: List[str] = []
+    names: List[str] = []
+
+    for name in top23_names:
+        if name in expr_map:
+            expr = expr_map[name]
+        elif name in new_factors:
+            expr = new_factors[name]
+        else:
+            raise ValueError(f"unknown factor name: {name}")
+        names.append(name)
+        exprs.append(expr)
+
+    return exprs, names
+
 
 def get_alpha261_feature_count() -> int:
     exprs, _ = get_alpha261_config()
