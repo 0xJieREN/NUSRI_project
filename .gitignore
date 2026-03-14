@@ -30,3 +30,4 @@ lgbm_feature_importance*.csv
 
 # Local scratch
 test/
+.worktrees/
