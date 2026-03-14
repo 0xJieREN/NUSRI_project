@@ -51,8 +51,8 @@ All forward work should follow these rules:
 
 **Phase 1 Deliverables**
 
-- A minimal spot backtester that consumes prediction artifacts with `pred_return` and `real_return`
-- A three-state `long/flat` execution model with fees, hysteresis, and cash management
+- A Qlib-first spot backtest layer that reuses official backtest interfaces wherever they fit the strategy shape
+- A three-state `long/flat` execution model with fees, hysteresis, and cash management, expressed through Qlib-native strategy and executor hooks when possible
 - Persisted outputs for:
   - equity curve
   - monthly returns
@@ -83,4 +83,4 @@ All forward work should follow these rules:
 
 **Success Criteria For Phase 1**
 
-Phase 1 is successful if the repository can run a fee-aware spot backtest on saved prediction files and emit a consistent summary table that can be used to decide whether the current signal stack is worth further development.
+Phase 1 is successful if the repository can run a fee-aware spot backtest through Qlib-native machinery where feasible and emit a consistent summary table that can be used to decide whether the current signal stack is worth further development.

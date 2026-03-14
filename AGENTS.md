@@ -151,6 +151,9 @@
 - 默认 QLib 数据目录：`./qlib_data/my_crypto_data`
 - 高频时间格式：`%Y-%m-%d %H:%M:%S`
 - `alpha261_config.py` 因子名必须唯一（重复会 `raise ValueError("duplicate factor name")`）
+- 涉及策略回测、执行器、交易成本、组合分析时，先检查 `Qlib` 官方现成能力是否已覆盖，例如 `qlib.backtest.backtest`、`qlib.contrib.evaluate.backtest_daily`、`qlib.workflow.record_temp.PortAnaRecord`
+- 如果 `Qlib` 已有合适能力，优先通过配置、封装和对接现有接口实现；不要先手写一套平行回测框架
+- 只有在 `Qlib` 现成接口无法准确表达当前需求时，才允许补充自定义实现；并在代码或文档中明确说明缺口
 
 ---
 

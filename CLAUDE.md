@@ -71,3 +71,5 @@ mlruns/              → MLflow tracking output
 - High-frequency time format: `%Y-%m-%d %H:%M:%S`
 - Alpha261 factor names must be unique (raises `ValueError` on duplicates)
 - Do not commit: `qlib_data/`, `mlruns/`, large CSV files (see `.gitignore`)
+- Before writing custom backtest or portfolio-analysis code, check whether QLib already provides the needed capability through `qlib.backtest.backtest`, `qlib.contrib.evaluate.backtest_daily`, or `qlib.workflow.record_temp.PortAnaRecord`
+- If QLib has a suitable built-in path, prefer configuring and integrating it over maintaining a parallel handwritten backtest stack
