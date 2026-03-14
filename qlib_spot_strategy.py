@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from qlib.contrib.strategy.order_generator import OrderGenWInteract
+from qlib.contrib.strategy.order_generator import OrderGenerator
 from qlib.contrib.strategy.signal_strategy import WeightStrategyBase
 from qlib.utils.time import Freq
 
@@ -75,7 +75,7 @@ class QlibLongFlatStrategy(WeightStrategyBase):
         de_risk_position: float = 0.5,
         **kwargs: Any,
     ) -> None:
-        super().__init__(order_generator_cls_or_obj=OrderGenWInteract(), **kwargs)
+        super().__init__(order_generator_cls_or_obj=QlibSingleAssetOrderGen(), **kwargs)
         self.instrument = instrument
         self.time_per_step = time_per_step
         self.entry_threshold = entry_threshold
@@ -145,3 +145,45 @@ class QlibLongFlatStrategy(WeightStrategyBase):
         if target_weight <= 0:
             return {}
         return {self.instrument: target_weight}
+
+
+class QlibSingleAssetOrderGen(OrderGenerator):
+    def generate_order_list_from_target_weight_position(
+        self,
+        current,
+        trade_exchange,
+        target_weight_position: dict,
+        risk_degree: float,
+        pred_start_time,
+        pred_end_time,
+        trade_start_time,
+        trade_end_time,
+    ):
+        if target_weight_position is None:
+            return []
+
+        current_amount_dict = current.get_stock_amount_dict()
+        current_total_value = current.calculate_value()
+        investable_cash = risk_degree * current_total_value
+        investable_cash /= 1 + max(trade_exchange.close_cost, trade_exchange.open_cost)
+
+        target_amount_dict = {}
+        for stock_id, target_weight in target_weight_position.items():
+            if target_weight <= 0:
+                continue
+            if not trade_exchange.is_stock_tradable(stock_id, start_time=trade_start_time, end_time=trade_end_time):
+                continue
+            deal_price = trade_exchange.get_deal_price(
+                stock_id=stock_id,
+                start_time=trade_start_time,
+                end_time=trade_end_time,
+                direction=1,
+            )
+            target_amount_dict[stock_id] = investable_cash * target_weight / deal_price
+
+        return trade_exchange.generate_order_for_target_amount_position(
+            target_position=target_amount_dict,
+            current_position=current_amount_dict,
+            start_time=trade_start_time,
+            end_time=trade_end_time,
+        )

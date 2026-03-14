@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 import pandas as pd
+from qlib.backtest.position import Position
 
 from backtest_spot_strategy import (
     _expand_prediction_globs,
@@ -13,7 +14,7 @@ from backtest_spot_strategy import (
     prepare_signal_frame,
     summarize_report,
 )
-from qlib_spot_strategy import compute_target_weight
+from qlib_spot_strategy import QlibSingleAssetOrderGen, compute_target_weight
 from strategy_config import SpotStrategyConfig
 
 
@@ -186,6 +187,75 @@ class SpotBacktestTests(unittest.TestCase):
             resolved = _expand_prediction_globs([str(pred_path)])
 
         self.assertEqual(resolved, [pred_path.resolve()])
+
+    def test_single_asset_order_generator_preserves_fractional_target_weight(self) -> None:
+        class StubExchange:
+            open_cost = 0.001
+            close_cost = 0.001
+
+            def is_stock_tradable(self, stock_id, start_time, end_time):
+                return True
+
+            def get_deal_price(self, stock_id, start_time, end_time, direction):
+                return 10.0
+
+            def get_factor(self, stock_id, start_time, end_time):
+                return 1.0
+
+            def generate_order_for_target_amount_position(self, target_position, current_position, start_time, end_time):
+                self.target_position = target_position
+                return target_position
+
+        exchange = StubExchange()
+        current = Position(cash=100_000.0, position_dict={})
+        generator = QlibSingleAssetOrderGen()
+
+        target = generator.generate_order_list_from_target_weight_position(
+            current=current,
+            trade_exchange=exchange,
+            target_weight_position={"BTCUSDT": 0.25},
+            risk_degree=1.0,
+            pred_start_time=pd.Timestamp("2024-01-01 00:00:00"),
+            pred_end_time=pd.Timestamp("2024-01-01 00:59:00"),
+            trade_start_time=pd.Timestamp("2024-01-01 01:00:00"),
+            trade_end_time=pd.Timestamp("2024-01-01 01:59:00"),
+        )
+
+        self.assertAlmostEqual(exchange.target_position["BTCUSDT"], 2497.502497502498, places=9)
+        self.assertAlmostEqual(target["BTCUSDT"], 2497.502497502498, places=9)
+
+    def test_single_asset_order_generator_allows_fractional_crypto_amounts(self) -> None:
+        class StubExchange:
+            open_cost = 0.001
+            close_cost = 0.001
+
+            def is_stock_tradable(self, stock_id, start_time, end_time):
+                return True
+
+            def get_deal_price(self, stock_id, start_time, end_time, direction):
+                return 40_000.0
+
+            def generate_order_for_target_amount_position(self, target_position, current_position, start_time, end_time):
+                self.target_position = target_position
+                return target_position
+
+        exchange = StubExchange()
+        current = Position(cash=100_000.0, position_dict={})
+        generator = QlibSingleAssetOrderGen()
+
+        target = generator.generate_order_list_from_target_weight_position(
+            current=current,
+            trade_exchange=exchange,
+            target_weight_position={"BTCUSDT": 0.15},
+            risk_degree=1.0,
+            pred_start_time=pd.Timestamp("2024-01-01 00:00:00"),
+            pred_end_time=pd.Timestamp("2024-01-01 00:59:00"),
+            trade_start_time=pd.Timestamp("2024-01-01 01:00:00"),
+            trade_end_time=pd.Timestamp("2024-01-01 01:59:00"),
+        )
+
+        self.assertAlmostEqual(exchange.target_position["BTCUSDT"], 0.374625, places=6)
+        self.assertAlmostEqual(target["BTCUSDT"], 0.374625, places=6)
 
 
 if __name__ == "__main__":
