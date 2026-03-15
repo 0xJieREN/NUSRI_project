@@ -15,6 +15,8 @@ PROVIDER_URI = "./qlib_data/my_crypto_data"
 DEFAULT_FEATURE_SET = "top23"
 DEFAULT_RUN_MODE = "rolling"
 DEFAULT_LABEL_HORIZON_HOURS = 8
+DEFAULT_LABEL_MODE = "regression_72h"
+DEFAULT_COST_AWARE_THRESHOLD = 0.005
 
 market = "all"
 benchmark = "BTCUSDT"
@@ -47,23 +49,80 @@ def build_label_config(label_horizon_hours: int = DEFAULT_LABEL_HORIZON_HOURS) -
     return [get_label_expr(label_horizon_hours)], [f"label_{label_horizon_hours}h"]
 
 
-def build_prediction_artifact_name(label_horizon_hours: int, month_label: str) -> str:
-    return f"pred_{label_horizon_hours}h_{month_label.replace('-', '')}.pkl"
+def get_cost_aware_binary_label_expr(label_horizon_hours: int, positive_threshold: float) -> str:
+    return f"If(Gt({get_label_expr(label_horizon_hours)}, {positive_threshold}), 1, 0)"
+
+
+def get_backtest_target_expr(label_horizon_hours: int) -> str:
+    return get_label_expr(label_horizon_hours)
+
+
+def transform_prediction_score(
+    *,
+    raw_prediction: float,
+    label_mode: str,
+    positive_threshold: float = DEFAULT_COST_AWARE_THRESHOLD,
+) -> float:
+    if label_mode.startswith("regression"):
+        return raw_prediction
+    if label_mode == "classification_72h_costaware":
+        return (raw_prediction - 0.5) * (2 * positive_threshold)
+    raise ValueError(f"Unknown label_mode: {label_mode}")
+
+
+def build_label_mode_config(
+    *,
+    label_mode: str,
+    label_horizon_hours: int,
+    positive_threshold: float = DEFAULT_COST_AWARE_THRESHOLD,
+) -> tuple[list[str], list[str]]:
+    if label_mode.startswith("regression"):
+        return build_label_config(label_horizon_hours)
+    if label_mode == "classification_72h_costaware":
+        return [get_cost_aware_binary_label_expr(label_horizon_hours, positive_threshold)], ["label_cls_72h_costaware"]
+    raise ValueError(f"Unknown label_mode: {label_mode}")
+
+
+def get_model_loss(label_mode: str) -> str:
+    if label_mode.startswith("regression"):
+        return "mse"
+    if label_mode == "classification_72h_costaware":
+        return "binary"
+    raise ValueError(f"Unknown label_mode: {label_mode}")
+
+
+def build_prediction_artifact_name(
+    label_horizon_hours: int,
+    month_label: str,
+    *,
+    label_mode: str | None = None,
+) -> str:
+    month_key = month_label.replace("-", "")
+    if label_mode is None:
+        return f"pred_{label_horizon_hours}h_{month_key}.pkl"
+    return f"pred_{label_mode}_{label_horizon_hours}h_{month_key}.pkl"
 
 
 def build_conf(
     feature_set: str = DEFAULT_FEATURE_SET,
     label_horizon_hours: int = DEFAULT_LABEL_HORIZON_HOURS,
+    label_mode: str = DEFAULT_LABEL_MODE,
+    positive_threshold: float = DEFAULT_COST_AWARE_THRESHOLD,
 ) -> dict:
     feature_config = get_feature_config(feature_set)
-    label_config = build_label_config(label_horizon_hours)
+    label_config = build_label_mode_config(
+        label_mode=label_mode,
+        label_horizon_hours=label_horizon_hours,
+        positive_threshold=positive_threshold,
+    )
+    model_loss = get_model_loss(label_mode)
     return {
         "task": {
             "model": {
                 "class": "LGBModel",
                 "module_path": "qlib.contrib.model.gbdt",
                 "kwargs": {
-                    "loss": "mse",
+                    "loss": model_loss,
                     "colsample_bytree": 0.6,
                     "subsample": 0.7,
                     "learning_rate": 0.005,
@@ -154,14 +213,37 @@ def _build_dataset_kwargs(
     return dataset_kwargs
 
 
-def _make_predictions(dataset, model, segment: str) -> pd.DataFrame:
+def _load_actual_return(dataset_conf: dict, segment: str, label_horizon_hours: int) -> pd.DataFrame:
+    temp_dataset_conf = deepcopy(dataset_conf)
+    label_config = ([get_backtest_target_expr(label_horizon_hours)], ["real_return"])
+    temp_dataset_conf["kwargs"]["handler"]["kwargs"]["data_loader"]["kwargs"]["config"]["label"] = label_config
+    temp_dataset = init_instance_by_config(temp_dataset_conf)
+    actual_return = temp_dataset.prepare(segment, col_set="label")
+    actual_return.columns = ["real_return"]
+    return actual_return
+
+
+def _make_predictions(
+    dataset,
+    model,
+    segment: str,
+    *,
+    dataset_conf: dict,
+    label_horizon_hours: int,
+    label_mode: str,
+    positive_threshold: float,
+) -> pd.DataFrame:
     pred = model.predict(dataset, segment=segment).to_frame("pred")
+    pred["pred_return"] = pred["pred"].map(
+        lambda raw: transform_prediction_score(
+            raw_prediction=float(raw),
+            label_mode=label_mode,
+            positive_threshold=positive_threshold,
+        )
+    )
 
-    label = dataset.prepare(segment, col_set="label")
-    label.columns = ["label"]
-
-    combined = pred.join(label, how="inner").dropna()
-    combined.columns = ["pred_return", "real_return"]
+    actual_return = _load_actual_return(dataset_conf, segment, label_horizon_hours)
+    combined = pred[["pred_return"]].join(actual_return, how="inner").dropna()
     return combined
 
 
@@ -207,7 +289,13 @@ def _print_summary(combined: pd.DataFrame, label_name: str, head_n: int = 10) ->
     print(combined.head(head_n))
 
 
-def run_single(workflow_conf: dict | None = None):
+def run_single(
+    workflow_conf: dict | None = None,
+    *,
+    label_horizon_hours: int = DEFAULT_LABEL_HORIZON_HOURS,
+    label_mode: str = DEFAULT_LABEL_MODE,
+    positive_threshold: float = DEFAULT_COST_AWARE_THRESHOLD,
+):
     workflow_conf = conf if workflow_conf is None else workflow_conf
     with R.start(experiment_name="btc_raw_return_lgb"):
         print("正在训练模型...")
@@ -217,11 +305,27 @@ def run_single(workflow_conf: dict | None = None):
         model.fit(dataset)
 
         recorder = R.get_recorder()
-        valid_pred = _make_predictions(dataset, model, "valid")
+        valid_pred = _make_predictions(
+            dataset,
+            model,
+            "valid",
+            dataset_conf=workflow_conf["task"]["dataset"],
+            label_horizon_hours=label_horizon_hours,
+            label_mode=label_mode,
+            positive_threshold=positive_threshold,
+        )
         _print_summary(valid_pred, "验证集", head_n=10)
         recorder.save_objects(**{"pred_valid.pkl": valid_pred})
 
-        test_pred = _make_predictions(dataset, model, "test")
+        test_pred = _make_predictions(
+            dataset,
+            model,
+            "test",
+            dataset_conf=workflow_conf["task"]["dataset"],
+            label_horizon_hours=label_horizon_hours,
+            label_mode=label_mode,
+            positive_threshold=positive_threshold,
+        )
         _print_summary(test_pred, "测试集", head_n=10)
         recorder.save_objects(**{"pred_test.pkl": test_pred})
 
@@ -230,6 +334,8 @@ def run_rolling_monthly(
     workflow_conf: dict | None = None,
     *,
     label_horizon_hours: int = DEFAULT_LABEL_HORIZON_HOURS,
+    label_mode: str = DEFAULT_LABEL_MODE,
+    positive_threshold: float = DEFAULT_COST_AWARE_THRESHOLD,
     prediction_output_dir: str | None = None,
 ):
     workflow_conf = conf if workflow_conf is None else workflow_conf
@@ -276,10 +382,22 @@ def run_rolling_monthly(
             dataset = init_instance_by_config(dataset_conf)
             model.fit(dataset)
 
-            test_pred = _make_predictions(dataset, model, "test")
+            test_pred = _make_predictions(
+                dataset,
+                model,
+                "test",
+                dataset_conf=dataset_conf,
+                label_horizon_hours=label_horizon_hours,
+                label_mode=label_mode,
+                positive_threshold=positive_threshold,
+            )
             yearly_results.setdefault(year_key, []).append(test_pred)
             if pred_output_path is not None:
-                output_name = build_prediction_artifact_name(label_horizon_hours, label_name)
+                output_name = build_prediction_artifact_name(
+                    label_horizon_hours,
+                    label_name,
+                    label_mode=label_mode,
+                )
                 test_pred.to_pickle(pred_output_path / output_name)
 
     for year_key in sorted(yearly_results.keys()):
@@ -293,6 +411,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-mode", choices=("single", "rolling"), default=DEFAULT_RUN_MODE)
     parser.add_argument("--provider-uri", default=PROVIDER_URI)
     parser.add_argument("--label-horizon-hours", type=int, default=DEFAULT_LABEL_HORIZON_HOURS)
+    parser.add_argument(
+        "--label-mode",
+        choices=("regression_72h", "classification_72h_costaware"),
+        default=DEFAULT_LABEL_MODE,
+    )
+    parser.add_argument("--cost-aware-threshold", type=float, default=DEFAULT_COST_AWARE_THRESHOLD)
     parser.add_argument("--prediction-output-dir", default=None)
     return parser.parse_args()
 
@@ -303,13 +427,22 @@ def main() -> int:
     workflow_conf = build_conf(
         feature_set=args.feature_set,
         label_horizon_hours=args.label_horizon_hours,
+        label_mode=args.label_mode,
+        positive_threshold=args.cost_aware_threshold,
     )
     if args.run_mode == "single":
-        run_single(workflow_conf)
+        run_single(
+            workflow_conf,
+            label_horizon_hours=args.label_horizon_hours,
+            label_mode=args.label_mode,
+            positive_threshold=args.cost_aware_threshold,
+        )
     elif args.run_mode == "rolling":
         run_rolling_monthly(
             workflow_conf,
             label_horizon_hours=args.label_horizon_hours,
+            label_mode=args.label_mode,
+            positive_threshold=args.cost_aware_threshold,
             prediction_output_dir=args.prediction_output_dir,
         )
     else:

@@ -6,8 +6,13 @@ import unittest
 
 from nusri_project.training.lgbm_workflow import (
     build_label_config,
+    build_label_mode_config,
     build_prediction_artifact_name,
+    get_backtest_target_expr,
+    get_cost_aware_binary_label_expr,
     get_label_expr,
+    get_model_loss,
+    transform_prediction_score,
 )
 from nusri_project.strategy.label_optimization_round1 import (
     build_round1_horizons,
@@ -15,6 +20,11 @@ from nusri_project.strategy.label_optimization_round1 import (
     build_round1_trading_shells,
     build_round1_matrix,
     find_horizon_prediction_files,
+)
+from nusri_project.strategy.cost_aware_label_round1 import (
+    build_cost_aware_round1_matrix,
+    build_cost_aware_round1_modes,
+    find_cost_aware_prediction_files,
 )
 
 
@@ -57,6 +67,54 @@ class LabelOptimizationRound1Tests(unittest.TestCase):
         self.assertEqual(build_prediction_artifact_name(24, "2024-03"), "pred_24h_202403.pkl")
         self.assertEqual(build_prediction_artifact_name(72, "2025-12"), "pred_72h_202512.pkl")
 
+    def test_cost_aware_binary_label_expr_uses_72h_and_threshold(self) -> None:
+        expr = get_cost_aware_binary_label_expr(label_horizon_hours=72, positive_threshold=0.005)
+
+        self.assertEqual(expr, "If(Gt(Ref($close, -72) / $close - 1, 0.005), 1, 0)")
+
+    def test_build_label_mode_config_for_costaware_binary(self) -> None:
+        label_exprs, label_names = build_label_mode_config(
+            label_mode="classification_72h_costaware",
+            label_horizon_hours=72,
+            positive_threshold=0.005,
+        )
+
+        self.assertEqual(label_exprs, ["If(Gt(Ref($close, -72) / $close - 1, 0.005), 1, 0)"])
+        self.assertEqual(label_names, ["label_cls_72h_costaware"])
+
+    def test_get_model_loss_switches_between_regression_and_binary(self) -> None:
+        self.assertEqual(get_model_loss("regression_72h"), "mse")
+        self.assertEqual(get_model_loss("classification_72h_costaware"), "binary")
+
+    def test_get_backtest_target_expr_always_returns_continuous_future_return(self) -> None:
+        self.assertEqual(get_backtest_target_expr(72), "Ref($close, -72) / $close - 1")
+
+    def test_transform_prediction_score_centers_binary_probability_to_threshold_scale(self) -> None:
+        self.assertAlmostEqual(
+            transform_prediction_score(
+                raw_prediction=0.8,
+                label_mode="classification_72h_costaware",
+                positive_threshold=0.005,
+            ),
+            0.003,
+            places=9,
+        )
+        self.assertAlmostEqual(
+            transform_prediction_score(
+                raw_prediction=0.2,
+                label_mode="classification_72h_costaware",
+                positive_threshold=0.005,
+            ),
+            -0.003,
+            places=9,
+        )
+
+    def test_build_prediction_artifact_name_can_encode_label_mode(self) -> None:
+        self.assertEqual(
+            build_prediction_artifact_name(72, "2024-03", label_mode="classification_72h_costaware"),
+            "pred_classification_72h_costaware_72h_202403.pkl",
+        )
+
     def test_build_round1_run_plan_creates_horizon_specific_prediction_dirs(self) -> None:
         plan = build_round1_run_plan(Path("reports/label_round1"))
 
@@ -80,6 +138,48 @@ class LabelOptimizationRound1Tests(unittest.TestCase):
             files = find_horizon_prediction_files(root, label_horizon_hours=24, year=2024)
 
         self.assertEqual([path.name for path in files], ["pred_24h_202401.pkl", "pred_24h_202402.pkl"])
+
+    def test_cost_aware_round1_modes_are_fixed_to_regression_and_binary(self) -> None:
+        self.assertEqual(build_cost_aware_round1_modes(), ["regression_72h", "classification_72h_costaware"])
+
+    def test_cost_aware_round1_matrix_crosses_modes_and_shells(self) -> None:
+        matrix = build_cost_aware_round1_matrix()
+
+        self.assertEqual(len(matrix), 4)
+        self.assertEqual(
+            matrix[0],
+            {"label_mode": "regression_72h", "shell_name": "balanced"},
+        )
+        self.assertEqual(
+            matrix[-1],
+            {"label_mode": "classification_72h_costaware", "shell_name": "conservative"},
+        )
+
+    def test_find_cost_aware_prediction_files_filters_by_mode_and_year(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in (
+                "pred_classification_72h_costaware_72h_202401.pkl",
+                "pred_classification_72h_costaware_72h_202402.pkl",
+                "pred_regression_72h_72h_202401.pkl",
+                "pred_classification_72h_costaware_72h_202501.pkl",
+            ):
+                (root / name).write_text("x")
+
+            files = find_cost_aware_prediction_files(
+                root,
+                label_mode="classification_72h_costaware",
+                label_horizon_hours=72,
+                year=2024,
+            )
+
+        self.assertEqual(
+            [path.name for path in files],
+            [
+                "pred_classification_72h_costaware_72h_202401.pkl",
+                "pred_classification_72h_costaware_72h_202402.pkl",
+            ],
+        )
 
 
 if __name__ == "__main__":
