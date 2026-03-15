@@ -130,6 +130,13 @@ class Phase2StrategyResearchTests(unittest.TestCase):
         self.assertTrue(all(candidate["max_position"] in {0.10, 0.15, 0.20, 0.25, 0.35, 0.50} for candidate in grid))
         self.assertTrue(all(candidate["min_holding_hours"] in {48, 72, 96} for candidate in grid))
 
+    def test_build_scan_profile_label72_trade_tuning_fast_stays_small(self) -> None:
+        grid = build_scan_profile("label72_trade_tuning_fast")
+
+        self.assertTrue(0 < len(grid) <= 64)
+        self.assertTrue(all(candidate["entry_threshold"] in {0.0015, 0.003, 0.005} for candidate in grid))
+        self.assertTrue(all(candidate["max_position"] in {0.15, 0.25, 0.35} for candidate in grid))
+
     def test_select_top_feasible_candidates_prefers_sharpe_then_return(self) -> None:
         frame = pd.DataFrame(
             [

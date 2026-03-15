@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fee-rate", type=float, default=0.001)
     parser.add_argument("--min-cost", type=float, default=0.0)
     parser.add_argument("--deal-price", default="close")
-    parser.add_argument("--scan-profile", default="label72_trade_tuning")
+    parser.add_argument("--scan-profile", default="label72_trade_tuning_fast")
     parser.add_argument("--top-k", type=int, default=5)
     return parser.parse_args()
 
