@@ -30,7 +30,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--experiment-profile", default=None)
     parser.add_argument("--year", type=int, default=2024)
     parser.add_argument("--instrument", default="BTCUSDT")
-    parser.add_argument("--output-dir", default="reports/phase2_2024")
+    parser.add_argument("--output-dir", default=None)
     parser.add_argument("--freq", default="60min")
     parser.add_argument("--initial-cash", type=float, default=100_000.0)
     parser.add_argument("--fee-rate", type=float, default=0.001)
@@ -90,7 +90,7 @@ def main() -> int:
         )
     config.validate()
 
-    output_dir = Path(args.output_dir)
+    output_dir = Path(args.output_dir or f"reports/baseline-{args.year}")
     baseline_summary = run_strategy_config(
         prediction_files,
         config,

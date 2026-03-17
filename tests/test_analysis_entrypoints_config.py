@@ -7,7 +7,6 @@ import unittest
 
 from nusri_project.config.runtime_config import load_runtime_config
 from nusri_project.strategy.strategy_config import build_spot_strategy_config_from_runtime
-from scripts.analysis.run_label_optimization_round1 import parse_args as parse_label_round1_args
 from scripts.analysis.run_72h_trade_tuning import parse_args as parse_72h_args
 from scripts.analysis.run_cost_aware_label_round1 import parse_args as parse_cost_aware_args
 from scripts.analysis.run_phase2_baseline import parse_args as parse_phase2_args
@@ -153,22 +152,6 @@ class AnalysisEntrypointsConfigTests(unittest.TestCase):
         self.assertEqual(args.experiment_profile, "cost_aware_main")
         self.assertIsNone(args.provider_uri)
 
-    def test_label_round1_parse_args_accepts_config_profile(self) -> None:
-        args = parse_label_round1_args(
-            [
-                "--predictions-root",
-                "reports/preds",
-                "--config",
-                "config.toml",
-                "--experiment-profile",
-                "regression_main",
-            ]
-        )
-
-        self.assertEqual(args.config, "config.toml")
-        self.assertEqual(args.experiment_profile, "regression_main")
-        self.assertIsNone(args.provider_uri)
-
     def test_backtest_parse_args_accepts_config_profile(self) -> None:
         args = parse_backtest_args(
             [
@@ -199,6 +182,18 @@ class AnalysisEntrypointsConfigTests(unittest.TestCase):
         self.assertEqual(config.enter_prob_threshold, 0.65)
         self.assertEqual(config.full_prob_threshold, 0.80)
         self.assertEqual(config.max_position, 0.15)
+
+    def test_phase2_default_output_dir_is_short(self) -> None:
+        args = parse_phase2_args(["--mlruns-root", "mlruns"])
+        self.assertIsNone(args.output_dir)
+
+    def test_72h_tuning_default_output_dir_is_short(self) -> None:
+        args = parse_72h_args(["--predictions-root", "reports/preds"])
+        self.assertIsNone(args.output_dir)
+
+    def test_cost_aware_default_output_root_is_short(self) -> None:
+        args = parse_cost_aware_args(["--predictions-root", "reports/preds"])
+        self.assertIsNone(args.output_root)
 
 
 if __name__ == "__main__":

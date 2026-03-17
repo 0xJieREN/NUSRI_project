@@ -7,10 +7,8 @@ from nusri_project.reporting.html_reports import build_index_html, generate_expe
 
 
 DEFAULT_EXPERIMENTS = [
-    "phase2_2024_round2_fast_fixed",
-    "phase2_2025_candidates",
-    "label_optimization_round1",
-    "cost_aware_label_round1_2025",
+    "costaware-2024",
+    "costaware-2025",
 ]
 
 

@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from nusri_project.strategy.label_optimization_round1 import (
-    build_round1_probability_shells,
-    build_round1_trading_shells,
+from nusri_project.strategy.research_profiles import (
+    build_probability_trading_shells,
+    build_return_trading_shells,
 )
 from nusri_project.strategy.phase2_strategy_research import run_strategy_config
 from nusri_project.strategy.strategy_config import SpotStrategyConfig
@@ -19,7 +19,7 @@ def build_cost_aware_round1_modes() -> list[str]:
 def build_cost_aware_round1_matrix() -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for label_mode in build_cost_aware_round1_modes():
-        for shell_name in build_round1_trading_shells():
+        for shell_name in build_return_trading_shells():
             rows.append({"label_mode": label_mode, "shell_name": shell_name})
     return rows
 
@@ -57,8 +57,8 @@ def evaluate_cost_aware_round1(
     deal_price: str = "close",
 ) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
-    return_shells = build_round1_trading_shells()
-    probability_shells = build_round1_probability_shells()
+    return_shells = build_return_trading_shells()
+    probability_shells = build_probability_trading_shells()
 
     for item in build_cost_aware_round1_matrix():
         label_mode = item["label_mode"]

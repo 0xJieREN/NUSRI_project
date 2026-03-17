@@ -273,7 +273,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--freq", default="60min")
     parser.add_argument(
         "--output-dir",
-        default="reports/spot_backtest",
+        default="reports/backtest",
         help="Directory where raw report, monthly returns, summary JSON, and positions are written.",
     )
     parser.add_argument("--initial-cash", type=float, default=100_000.0)

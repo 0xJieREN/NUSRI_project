@@ -78,7 +78,7 @@ uv run python -m scripts.training.lgbm_workflow --config config.toml --experimen
 
 ```bash
 uv run python -m scripts.analysis.backtest_spot_strategy \
-  --pred-glob "reports/cost_aware_label_round1/predictions/classification_72h_costaware/pred_classification_72h_costaware_72h_2025*.pkl" \
+  --pred-glob "reports/costaware-preds/pred_classification_72h_costaware_72h_2025*.pkl" \
   --config config.toml \
   --experiment-profile cost_aware_main
 ```
@@ -87,7 +87,7 @@ uv run python -m scripts.analysis.backtest_spot_strategy \
 
 ```bash
 uv run python -m scripts.analysis.run_cost_aware_label_round1 \
-  --predictions-root reports/cost_aware_label_round1/predictions \
+  --predictions-root reports/costaware-preds \
   --config config.toml \
   --experiment-profile cost_aware_main \
   --year 2025 \
@@ -98,7 +98,7 @@ uv run python -m scripts.analysis.run_cost_aware_label_round1 \
 
 ```bash
 uv run python -m scripts.analysis.run_72h_trade_tuning \
-  --predictions-root reports/label_optimization_round1/predictions \
+  --predictions-root reports/costaware-preds \
   --config config.toml \
   --experiment-profile regression_72h_main \
   --year 2024 \
@@ -114,17 +114,6 @@ uv run python -m scripts.analysis.run_phase2_baseline \
   --experiment-profile regression_72h_main \
   --year 2024 \
   --scan \
-  --update-html
-```
-
-### label optimization round1
-
-```bash
-uv run python -m scripts.analysis.run_label_optimization_round1 \
-  --predictions-root reports/label_optimization_round1/predictions \
-  --config config.toml \
-  --experiment-profile regression_72h_main \
-  --year 2024 \
   --update-html
 ```
 

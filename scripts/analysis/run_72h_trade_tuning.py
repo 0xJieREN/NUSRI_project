@@ -18,7 +18,7 @@ from nusri_project.strategy.phase2_strategy_research import (
     run_parameter_scan,
     select_top_feasible_candidates,
 )
-from nusri_project.strategy.label_optimization_round1 import find_horizon_prediction_files
+from nusri_project.strategy.research_profiles import find_horizon_prediction_files
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -28,7 +28,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--config", default=None)
     parser.add_argument("--experiment-profile", default=None)
     parser.add_argument("--year", type=int, default=2024)
-    parser.add_argument("--output-dir", default="reports/label72_trade_tuning")
+    parser.add_argument("--output-dir", default=None)
     parser.add_argument("--instrument", default="BTCUSDT")
     parser.add_argument("--freq", default="60min")
     parser.add_argument("--initial-cash", type=float, default=100_000.0)
@@ -75,7 +75,7 @@ def main() -> int:
         )
     config.validate()
 
-    output_dir = Path(args.output_dir)
+    output_dir = Path(args.output_dir or f"reports/tune-72h-{args.year}")
     scan_results = run_parameter_scan(
         prediction_files,
         config,

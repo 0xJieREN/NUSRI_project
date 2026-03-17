@@ -76,9 +76,8 @@
 
 - `uv run python -m scripts.analysis.backtest_spot_strategy --pred-glob "/absolute/path/to/pred_*.pkl" --config config.toml --experiment-profile cost_aware_main`
 - `uv run python -m scripts.analysis.run_phase2_baseline --mlruns-root ./mlruns --config config.toml --experiment-profile regression_72h_main --year 2024 --scan`
-- `uv run python -m scripts.analysis.run_72h_trade_tuning --predictions-root reports/label_optimization_round1/predictions --config config.toml --experiment-profile regression_72h_main --year 2024`
-- `uv run python -m scripts.analysis.run_cost_aware_label_round1 --predictions-root reports/cost_aware_label_round1/predictions --config config.toml --experiment-profile cost_aware_main --year 2025`
-- `uv run python -m scripts.analysis.run_label_optimization_round1 --predictions-root reports/label_optimization_round1/predictions --config config.toml --experiment-profile regression_72h_main --year 2024`
+- `uv run python -m scripts.analysis.run_72h_trade_tuning --predictions-root reports/costaware-preds --config config.toml --experiment-profile regression_72h_main --year 2024`
+- `uv run python -m scripts.analysis.run_cost_aware_label_round1 --predictions-root reports/costaware-preds --config config.toml --experiment-profile cost_aware_main --year 2025`
 
 ---
 
