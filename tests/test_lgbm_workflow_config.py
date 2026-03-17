@@ -1,0 +1,145 @@
+from __future__ import annotations
+
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import textwrap
+import unittest
+
+from nusri_project.training.lgbm_workflow import (
+    build_conf_from_runtime,
+    load_training_runtime_bundle,
+)
+
+
+CONFIG_TEXT = """
+[defaults]
+experiment_profile = "cost_aware_main"
+
+[data.btc_1h_full]
+start_time = "2019-09-10 08:00:00"
+end_time = "2025-12-31 23:00:00"
+freq = "60min"
+provider_uri = "./qlib_data/my_crypto_data"
+instrument = "BTCUSDT"
+fields = ["ohlcv", "amount", "taker_buy_base_volume", "taker_buy_quote_volume", "funding_rate"]
+deal_price = "close"
+initial_cash = 100000.0
+fee_rate = 0.001
+min_cost = 0.0
+
+[factors.top23]
+feature_set = "top23"
+
+[labels.regression_72h]
+kind = "regression"
+horizon_hours = 72
+
+[labels.classification_72h_costaware]
+kind = "classification_costaware"
+horizon_hours = 72
+round_trip_cost = 0.002
+safety_margin = 0.003
+positive_threshold = 0.005
+
+[models.lgbm_binary_default]
+model_type = "lightgbm"
+objective = "binary"
+
+[models.lgbm_regression_default]
+model_type = "lightgbm"
+objective = "mse"
+
+[training.rolling_2y_monthly]
+run_mode = "rolling"
+training_window = "2y"
+rolling_step_months = 1
+
+[training.single_full]
+run_mode = "single"
+training_window = "all"
+
+[trading.prob_conservative]
+signal_kind = "probability"
+enter_prob_threshold = 0.65
+exit_prob_threshold = 0.50
+full_prob_threshold = 0.80
+max_position = 0.15
+min_holding_hours = 48
+cooldown_hours = 12
+drawdown_de_risk_threshold = 0.02
+de_risk_position = 0.0
+
+[trading.return_conservative]
+signal_kind = "return"
+entry_threshold = 0.0015
+exit_threshold = 0.0
+full_position_threshold = 0.003
+max_position = 0.15
+min_holding_hours = 48
+cooldown_hours = 12
+drawdown_de_risk_threshold = 0.02
+de_risk_position = 0.0
+
+[experiments.cost_aware_main]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_2y_monthly"
+trade_profile = "prob_conservative"
+
+[experiments.regression_main]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "regression_72h"
+model_profile = "lgbm_regression_default"
+training_profile = "single_full"
+trade_profile = "return_conservative"
+"""
+
+
+class LgbmWorkflowConfigTests(unittest.TestCase):
+    def _write_config(self) -> Path:
+        temp_dir = TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        path = Path(temp_dir.name) / "config.toml"
+        path.write_text(textwrap.dedent(CONFIG_TEXT).strip() + "\n")
+        return path
+
+    def test_load_training_runtime_bundle_for_classification_profile(self) -> None:
+        config_path = self._write_config()
+
+        bundle = load_training_runtime_bundle(config_path, experiment_name="cost_aware_main")
+
+        self.assertEqual(bundle.feature_set, "top23")
+        self.assertEqual(bundle.label_mode, "classification_72h_costaware")
+        self.assertEqual(bundle.label_horizon_hours, 72)
+        self.assertAlmostEqual(bundle.positive_threshold, 0.005)
+        self.assertEqual(bundle.run_mode, "rolling")
+        self.assertEqual(bundle.provider_uri, "./qlib_data/my_crypto_data")
+
+    def test_build_conf_from_runtime_for_classification_uses_binary_label(self) -> None:
+        config_path = self._write_config()
+        bundle = load_training_runtime_bundle(config_path, experiment_name="cost_aware_main")
+
+        workflow_conf = build_conf_from_runtime(bundle.runtime)
+
+        label_exprs, label_names = workflow_conf["task"]["dataset"]["kwargs"]["handler"]["kwargs"]["data_loader"]["kwargs"]["config"]["label"]
+        self.assertEqual(label_exprs, ["If(Gt(Ref($close, -72) / $close - 1, 0.005), 1, 0)"])
+        self.assertEqual(label_names, ["label_cls_72h_costaware"])
+        self.assertEqual(workflow_conf["task"]["model"]["kwargs"]["loss"], "binary")
+
+    def test_build_conf_from_runtime_for_regression_uses_mse_label(self) -> None:
+        config_path = self._write_config()
+        bundle = load_training_runtime_bundle(config_path, experiment_name="regression_main")
+
+        workflow_conf = build_conf_from_runtime(bundle.runtime)
+
+        label_exprs, label_names = workflow_conf["task"]["dataset"]["kwargs"]["handler"]["kwargs"]["data_loader"]["kwargs"]["config"]["label"]
+        self.assertEqual(label_exprs, ["Ref($close, -72) / $close - 1"])
+        self.assertEqual(label_names, ["label_72h"])
+        self.assertEqual(workflow_conf["task"]["model"]["kwargs"]["loss"], "mse")
+
+
+if __name__ == "__main__":
+    unittest.main()

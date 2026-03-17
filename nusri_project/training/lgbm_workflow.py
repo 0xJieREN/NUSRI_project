@@ -1,5 +1,6 @@
 import argparse
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import cast
@@ -10,6 +11,21 @@ from qlib.constant import REG_CN
 from qlib.utils import init_instance_by_config
 from qlib.workflow import R
 from nusri_project.config.alpha261_config import get_alpha261_config, get_top23_config
+from nusri_project.config.runtime_config import load_runtime_config
+from nusri_project.config.schemas import ExperimentRuntimeConfig
+from nusri_project.training.label_factory import (
+    build_label_config,
+    build_label_mode_config,
+    get_backtest_target_expr,
+    get_cost_aware_binary_label_expr,
+    get_label_expr,
+    get_label_mode_from_config,
+)
+from nusri_project.training.model_factory import (
+    build_lgb_model_config,
+    build_model_config_from_runtime,
+    get_model_loss,
+)
 
 PROVIDER_URI = "./qlib_data/my_crypto_data"
 DEFAULT_FEATURE_SET = "top23"
@@ -29,6 +45,18 @@ ROLLING_START = "2024-01-01 00:00:00"
 ROLLING_END = "2025-12-31 23:00:00"
 ROLLING_TRAIN_YEARS = 2
 
+
+@dataclass(frozen=True)
+class TrainingRuntimeBundle:
+    runtime: ExperimentRuntimeConfig
+    feature_set: str
+    label_mode: str
+    label_horizon_hours: int
+    positive_threshold: float
+    run_mode: str
+    provider_uri: str
+
+
 def init_qlib(provider_uri: str = PROVIDER_URI) -> None:
     qlib.init(provider_uri=provider_uri, region=REG_CN)
 
@@ -39,22 +67,6 @@ def get_feature_config(feature_set: str):
     if feature_set == "top23":
         return get_top23_config()
     raise ValueError(f"Unknown FEATURE_SET: {feature_set}")
-
-
-def get_label_expr(label_horizon_hours: int) -> str:
-    return f"Ref($close, -{label_horizon_hours}) / $close - 1"
-
-
-def build_label_config(label_horizon_hours: int = DEFAULT_LABEL_HORIZON_HOURS) -> tuple[list[str], list[str]]:
-    return [get_label_expr(label_horizon_hours)], [f"label_{label_horizon_hours}h"]
-
-
-def get_cost_aware_binary_label_expr(label_horizon_hours: int, positive_threshold: float) -> str:
-    return f"If(Gt({get_label_expr(label_horizon_hours)}, {positive_threshold}), 1, 0)"
-
-
-def get_backtest_target_expr(label_horizon_hours: int) -> str:
-    return get_label_expr(label_horizon_hours)
 
 
 def transform_prediction_score(
@@ -70,27 +82,6 @@ def transform_prediction_score(
     raise ValueError(f"Unknown label_mode: {label_mode}")
 
 
-def build_label_mode_config(
-    *,
-    label_mode: str,
-    label_horizon_hours: int,
-    positive_threshold: float = DEFAULT_COST_AWARE_THRESHOLD,
-) -> tuple[list[str], list[str]]:
-    if label_mode.startswith("regression"):
-        return build_label_config(label_horizon_hours)
-    if label_mode == "classification_72h_costaware":
-        return [get_cost_aware_binary_label_expr(label_horizon_hours, positive_threshold)], ["label_cls_72h_costaware"]
-    raise ValueError(f"Unknown label_mode: {label_mode}")
-
-
-def get_model_loss(label_mode: str) -> str:
-    if label_mode.startswith("regression"):
-        return "mse"
-    if label_mode == "classification_72h_costaware":
-        return "binary"
-    raise ValueError(f"Unknown label_mode: {label_mode}")
-
-
 def build_prediction_artifact_name(
     label_horizon_hours: int,
     month_label: str,
@@ -101,6 +92,47 @@ def build_prediction_artifact_name(
     if label_mode is None:
         return f"pred_{label_horizon_hours}h_{month_key}.pkl"
     return f"pred_{label_mode}_{label_horizon_hours}h_{month_key}.pkl"
+
+
+def load_training_runtime_bundle(
+    config_path: str | Path,
+    *,
+    experiment_name: str | None = None,
+) -> TrainingRuntimeBundle:
+    runtime = load_runtime_config(config_path, experiment_name=experiment_name)
+    label_mode = get_label_mode_from_config(runtime.label)
+    return TrainingRuntimeBundle(
+        runtime=runtime,
+        feature_set=runtime.factors.feature_set,
+        label_mode=label_mode,
+        label_horizon_hours=runtime.label.horizon_hours,
+        positive_threshold=float(runtime.label.positive_threshold or DEFAULT_COST_AWARE_THRESHOLD),
+        run_mode=runtime.training.run_mode,
+        provider_uri=runtime.data.provider_uri,
+    )
+
+
+def build_conf_from_runtime(runtime: ExperimentRuntimeConfig) -> dict:
+    label_mode = get_label_mode_from_config(runtime.label)
+    positive_threshold = float(runtime.label.positive_threshold or DEFAULT_COST_AWARE_THRESHOLD)
+    feature_config = get_feature_config(runtime.factors.feature_set)
+    label_config = build_label_mode_config(
+        label_mode=label_mode,
+        label_horizon_hours=runtime.label.horizon_hours,
+        positive_threshold=positive_threshold,
+    )
+    model_config = build_model_config_from_runtime(runtime.model)
+    workflow_conf = build_conf(
+        feature_set=runtime.factors.feature_set,
+        label_horizon_hours=runtime.label.horizon_hours,
+        label_mode=label_mode,
+        positive_threshold=positive_threshold,
+    )
+    workflow_conf["task"]["model"] = model_config
+    workflow_conf["task"]["dataset"]["kwargs"]["handler"]["kwargs"]["data_loader"]["kwargs"]["config"]["feature"] = feature_config
+    workflow_conf["task"]["dataset"]["kwargs"]["handler"]["kwargs"]["data_loader"]["kwargs"]["config"]["label"] = label_config
+    workflow_conf["task"]["dataset"]["kwargs"]["handler"]["kwargs"]["data_loader"]["kwargs"]["freq"] = runtime.data.freq
+    return workflow_conf
 
 
 def build_conf(
@@ -118,23 +150,7 @@ def build_conf(
     model_loss = get_model_loss(label_mode)
     return {
         "task": {
-            "model": {
-                "class": "LGBModel",
-                "module_path": "qlib.contrib.model.gbdt",
-                "kwargs": {
-                    "loss": model_loss,
-                    "colsample_bytree": 0.6,
-                    "subsample": 0.7,
-                    "learning_rate": 0.005,
-                    "lambda_l1": 1.5,
-                    "lambda_l2": 5.0,
-                    "max_depth": 5,
-                    "num_leaves": 31,
-                    "min_data_in_leaf": 100,
-                    "bagging_freq": 5,
-                    "num_threads": 8,
-                },
-            },
+            "model": build_lgb_model_config(model_loss),
             "dataset": {
                 "class": "DatasetH",
                 "module_path": "qlib.data.dataset",
@@ -410,6 +426,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--feature-set", choices=("alpha261", "top23"), default=DEFAULT_FEATURE_SET)
     parser.add_argument("--run-mode", choices=("single", "rolling"), default=DEFAULT_RUN_MODE)
     parser.add_argument("--provider-uri", default=PROVIDER_URI)
+    parser.add_argument("--config", default=None)
+    parser.add_argument("--experiment-profile", default=None)
     parser.add_argument("--label-horizon-hours", type=int, default=DEFAULT_LABEL_HORIZON_HOURS)
     parser.add_argument(
         "--label-mode",
@@ -423,30 +441,48 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    init_qlib(provider_uri=args.provider_uri)
-    workflow_conf = build_conf(
-        feature_set=args.feature_set,
-        label_horizon_hours=args.label_horizon_hours,
-        label_mode=args.label_mode,
-        positive_threshold=args.cost_aware_threshold,
-    )
-    if args.run_mode == "single":
+    feature_set = args.feature_set
+    label_horizon_hours = args.label_horizon_hours
+    label_mode = args.label_mode
+    positive_threshold = args.cost_aware_threshold
+    run_mode = args.run_mode
+    provider_uri = args.provider_uri
+
+    if args.config is not None:
+        bundle = load_training_runtime_bundle(args.config, experiment_name=args.experiment_profile)
+        workflow_conf = build_conf_from_runtime(bundle.runtime)
+        feature_set = bundle.feature_set
+        label_horizon_hours = bundle.label_horizon_hours
+        label_mode = bundle.label_mode
+        positive_threshold = bundle.positive_threshold
+        run_mode = bundle.run_mode
+        provider_uri = bundle.provider_uri
+    else:
+        workflow_conf = build_conf(
+            feature_set=feature_set,
+            label_horizon_hours=label_horizon_hours,
+            label_mode=label_mode,
+            positive_threshold=positive_threshold,
+        )
+
+    init_qlib(provider_uri=provider_uri)
+    if run_mode == "single":
         run_single(
             workflow_conf,
-            label_horizon_hours=args.label_horizon_hours,
-            label_mode=args.label_mode,
-            positive_threshold=args.cost_aware_threshold,
+            label_horizon_hours=label_horizon_hours,
+            label_mode=label_mode,
+            positive_threshold=positive_threshold,
         )
-    elif args.run_mode == "rolling":
+    elif run_mode == "rolling":
         run_rolling_monthly(
             workflow_conf,
-            label_horizon_hours=args.label_horizon_hours,
-            label_mode=args.label_mode,
-            positive_threshold=args.cost_aware_threshold,
+            label_horizon_hours=label_horizon_hours,
+            label_mode=label_mode,
+            positive_threshold=positive_threshold,
             prediction_output_dir=args.prediction_output_dir,
         )
     else:
-        raise ValueError(f"Unknown RUN_MODE: {args.run_mode}")
+        raise ValueError(f"Unknown RUN_MODE: {run_mode}")
     return 0
 
 
