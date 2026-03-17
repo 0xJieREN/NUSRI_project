@@ -7,6 +7,7 @@ import unittest
 
 from nusri_project.config.runtime_config import load_runtime_config
 from nusri_project.strategy.strategy_config import build_spot_strategy_config_from_runtime
+from scripts.analysis.run_label_optimization_round1 import parse_args as parse_label_round1_args
 from scripts.analysis.run_72h_trade_tuning import parse_args as parse_72h_args
 from scripts.analysis.run_cost_aware_label_round1 import parse_args as parse_cost_aware_args
 from scripts.analysis.run_phase2_baseline import parse_args as parse_phase2_args
@@ -150,6 +151,22 @@ class AnalysisEntrypointsConfigTests(unittest.TestCase):
 
         self.assertEqual(args.config, "config.toml")
         self.assertEqual(args.experiment_profile, "cost_aware_main")
+        self.assertIsNone(args.provider_uri)
+
+    def test_label_round1_parse_args_accepts_config_profile(self) -> None:
+        args = parse_label_round1_args(
+            [
+                "--predictions-root",
+                "reports/preds",
+                "--config",
+                "config.toml",
+                "--experiment-profile",
+                "regression_main",
+            ]
+        )
+
+        self.assertEqual(args.config, "config.toml")
+        self.assertEqual(args.experiment_profile, "regression_main")
         self.assertIsNone(args.provider_uri)
 
     def test_backtest_parse_args_accepts_config_profile(self) -> None:
