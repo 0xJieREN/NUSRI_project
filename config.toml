@@ -1,0 +1,141 @@
+[defaults]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_2y_monthly"
+trade_profile = "prob_conservative"
+experiment_profile = "cost_aware_main"
+
+[data.btc_1h_full]
+start_time = "2019-09-10 08:00:00"
+end_time = "2025-12-31 23:00:00"
+freq = "60min"
+provider_uri = "./qlib_data/my_crypto_data"
+instrument = "BTCUSDT"
+fields = ["ohlcv", "amount", "taker_buy_base_volume", "taker_buy_quote_volume", "funding_rate"]
+deal_price = "close"
+initial_cash = 100000.0
+fee_rate = 0.001
+min_cost = 0.0
+
+[data.btc_1d_full]
+start_time = "2019-09-10 00:00:00"
+end_time = "2025-12-31 00:00:00"
+freq = "day"
+provider_uri = "./qlib_data/my_crypto_data"
+instrument = "BTCUSDT"
+fields = ["ohlcv", "amount", "funding_rate"]
+deal_price = "close"
+initial_cash = 100000.0
+fee_rate = 0.001
+min_cost = 0.0
+
+[factors.alpha158]
+feature_set = "alpha158"
+
+[factors.alpha261]
+feature_set = "alpha261"
+
+[factors.top23]
+feature_set = "top23"
+
+[labels.regression_8h]
+kind = "regression"
+horizon_hours = 8
+
+[labels.regression_24h]
+kind = "regression"
+horizon_hours = 24
+
+[labels.regression_48h]
+kind = "regression"
+horizon_hours = 48
+
+[labels.regression_72h]
+kind = "regression"
+horizon_hours = 72
+
+[labels.classification_72h_costaware]
+kind = "classification_costaware"
+horizon_hours = 72
+round_trip_cost = 0.002
+safety_margin = 0.003
+positive_threshold = 0.005
+
+[models.lgbm_regression_default]
+model_type = "lightgbm"
+objective = "mse"
+
+[models.lgbm_binary_default]
+model_type = "lightgbm"
+objective = "binary"
+
+[training.rolling_2y_monthly]
+run_mode = "rolling"
+training_window = "2y"
+rolling_step_months = 1
+
+[training.single_full]
+run_mode = "single"
+training_window = "all"
+
+[trading.return_balanced]
+signal_kind = "return"
+entry_threshold = 0.0015
+exit_threshold = 0.0
+full_position_threshold = 0.003
+max_position = 0.25
+min_holding_hours = 48
+cooldown_hours = 12
+drawdown_de_risk_threshold = 0.02
+de_risk_position = 0.10
+
+[trading.return_conservative]
+signal_kind = "return"
+entry_threshold = 0.0015
+exit_threshold = 0.0
+full_position_threshold = 0.003
+max_position = 0.15
+min_holding_hours = 48
+cooldown_hours = 12
+drawdown_de_risk_threshold = 0.02
+de_risk_position = 0.0
+
+[trading.prob_balanced]
+signal_kind = "probability"
+enter_prob_threshold = 0.65
+exit_prob_threshold = 0.50
+full_prob_threshold = 0.80
+max_position = 0.25
+min_holding_hours = 48
+cooldown_hours = 12
+drawdown_de_risk_threshold = 0.02
+de_risk_position = 0.10
+
+[trading.prob_conservative]
+signal_kind = "probability"
+enter_prob_threshold = 0.65
+exit_prob_threshold = 0.50
+full_prob_threshold = 0.80
+max_position = 0.15
+min_holding_hours = 48
+cooldown_hours = 12
+drawdown_de_risk_threshold = 0.02
+de_risk_position = 0.0
+
+[experiments.cost_aware_main]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_2y_monthly"
+trade_profile = "prob_conservative"
+
+[experiments.regression_72h_main]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "regression_72h"
+model_profile = "lgbm_regression_default"
+training_profile = "rolling_2y_monthly"
+trade_profile = "return_conservative"
