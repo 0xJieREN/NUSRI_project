@@ -61,5 +61,7 @@ def find_horizon_prediction_files(
     label_horizon_hours: int,
     year: int,
 ) -> list[Path]:
+    if not prediction_dir.exists() and prediction_dir.name == f"{label_horizon_hours}h":
+        prediction_dir = prediction_dir.parent
     pattern = f"pred_{label_horizon_hours}h_{year}[0-1][0-9].pkl"
     return sorted(prediction_dir.glob(pattern), key=lambda path: path.name)

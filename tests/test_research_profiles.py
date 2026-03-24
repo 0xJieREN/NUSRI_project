@@ -82,6 +82,20 @@ class ResearchProfilesTests(unittest.TestCase):
 
         self.assertEqual([path.name for path in files], ["pred_24h_202401.pkl", "pred_24h_202402.pkl"])
 
+    def test_find_horizon_prediction_files_falls_back_to_parent_when_horizon_dir_missing(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in (
+                "pred_72h_202401.pkl",
+                "pred_72h_202402.pkl",
+                "pred_72h_202501.pkl",
+            ):
+                (root / name).write_text("x")
+
+            files = find_horizon_prediction_files(root / "72h", label_horizon_hours=72, year=2024)
+
+        self.assertEqual([path.name for path in files], ["pred_72h_202401.pkl", "pred_72h_202402.pkl"])
+
     def test_cost_aware_round1_modes_and_matrix(self) -> None:
         self.assertEqual(build_cost_aware_round1_modes(), ["regression_72h", "classification_72h_costaware"])
         matrix = build_cost_aware_round1_matrix()
