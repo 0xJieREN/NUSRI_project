@@ -10,6 +10,7 @@ import pandas as pd
 from nusri_project.strategy.phase2_strategy_research import (
     build_scan_profile,
     build_parameter_grid,
+    build_probability_parameter_grid,
     find_prediction_files,
     rank_scan_results,
     select_top_feasible_candidates,
@@ -80,6 +81,84 @@ class Phase2StrategyResearchTests(unittest.TestCase):
                     "cooldown_hours": 6,
                     "drawdown_de_risk_threshold": 0.08,
                     "de_risk_position": 0.5,
+                },
+            ],
+        )
+
+    def test_build_probability_parameter_grid_filters_invalid_combinations(self) -> None:
+        grid = build_probability_parameter_grid(
+            enter_prob_thresholds=[0.58, 0.62],
+            exit_prob_thresholds=[0.45, 0.70],
+            full_prob_thresholds=[0.60, 0.80],
+            max_positions=[0.15, 0.25],
+            min_holding_hours_list=[24],
+            cooldown_hours_list=[12],
+            drawdown_thresholds=[0.02],
+            de_risk_positions=[0.0, 0.30],
+        )
+
+        self.assertEqual(
+            grid,
+            [
+                {
+                    "enter_prob_threshold": 0.58,
+                    "exit_prob_threshold": 0.45,
+                    "full_prob_threshold": 0.6,
+                    "max_position": 0.15,
+                    "min_holding_hours": 24,
+                    "cooldown_hours": 12,
+                    "drawdown_de_risk_threshold": 0.02,
+                    "de_risk_position": 0.0,
+                },
+                {
+                    "enter_prob_threshold": 0.58,
+                    "exit_prob_threshold": 0.45,
+                    "full_prob_threshold": 0.6,
+                    "max_position": 0.25,
+                    "min_holding_hours": 24,
+                    "cooldown_hours": 12,
+                    "drawdown_de_risk_threshold": 0.02,
+                    "de_risk_position": 0.0,
+                },
+                {
+                    "enter_prob_threshold": 0.58,
+                    "exit_prob_threshold": 0.45,
+                    "full_prob_threshold": 0.8,
+                    "max_position": 0.15,
+                    "min_holding_hours": 24,
+                    "cooldown_hours": 12,
+                    "drawdown_de_risk_threshold": 0.02,
+                    "de_risk_position": 0.0,
+                },
+                {
+                    "enter_prob_threshold": 0.58,
+                    "exit_prob_threshold": 0.45,
+                    "full_prob_threshold": 0.8,
+                    "max_position": 0.25,
+                    "min_holding_hours": 24,
+                    "cooldown_hours": 12,
+                    "drawdown_de_risk_threshold": 0.02,
+                    "de_risk_position": 0.0,
+                },
+                {
+                    "enter_prob_threshold": 0.62,
+                    "exit_prob_threshold": 0.45,
+                    "full_prob_threshold": 0.8,
+                    "max_position": 0.15,
+                    "min_holding_hours": 24,
+                    "cooldown_hours": 12,
+                    "drawdown_de_risk_threshold": 0.02,
+                    "de_risk_position": 0.0,
+                },
+                {
+                    "enter_prob_threshold": 0.62,
+                    "exit_prob_threshold": 0.45,
+                    "full_prob_threshold": 0.8,
+                    "max_position": 0.25,
+                    "min_holding_hours": 24,
+                    "cooldown_hours": 12,
+                    "drawdown_de_risk_threshold": 0.02,
+                    "de_risk_position": 0.0,
                 },
             ],
         )
@@ -194,6 +273,30 @@ class Phase2StrategyResearchTests(unittest.TestCase):
         self.assertTrue(0 < len(grid) <= 64)
         self.assertTrue(all(candidate["entry_threshold"] in {0.0015, 0.003, 0.005} for candidate in grid))
         self.assertTrue(all(candidate["max_position"] in {0.15, 0.25, 0.35} for candidate in grid))
+
+    def test_build_scan_profile_probability_grid_uses_probability_fields(self) -> None:
+        config_path = self._write_config(
+            """
+            [scan_profiles.prob_trade_tuning_fast]
+            kind = "probability_grid"
+            enter_prob_thresholds = [0.58, 0.62]
+            exit_prob_thresholds = [0.45, 0.50]
+            full_prob_thresholds = [0.72, 0.84]
+            max_positions = [0.15, 0.25]
+            min_holding_hours_list = [24, 48]
+            cooldown_hours_list = [12]
+            drawdown_thresholds = [0.02, 0.04]
+            de_risk_positions = [0.0, 0.10]
+            """
+        )
+        grid = build_scan_profile("prob_trade_tuning_fast", config_path=config_path)
+
+        self.assertTrue(0 < len(grid) <= 128)
+        self.assertTrue(all("enter_prob_threshold" in candidate for candidate in grid))
+        self.assertTrue(all("exit_prob_threshold" in candidate for candidate in grid))
+        self.assertTrue(all("full_prob_threshold" in candidate for candidate in grid))
+        self.assertTrue(all(candidate["full_prob_threshold"] >= candidate["enter_prob_threshold"] for candidate in grid))
+        self.assertTrue(all(candidate["enter_prob_threshold"] >= candidate["exit_prob_threshold"] for candidate in grid))
 
     def test_build_scan_profile_raises_for_missing_profile(self) -> None:
         config_path = self._write_config("")

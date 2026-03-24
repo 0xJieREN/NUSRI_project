@@ -82,6 +82,61 @@ def build_parameter_grid(
     return candidates
 
 
+def build_probability_parameter_grid(
+    *,
+    enter_prob_thresholds: list[float],
+    exit_prob_thresholds: list[float],
+    full_prob_thresholds: list[float],
+    max_positions: list[float],
+    min_holding_hours_list: list[int],
+    cooldown_hours_list: list[int],
+    drawdown_thresholds: list[float],
+    de_risk_positions: list[float],
+) -> list[dict]:
+    candidates: list[dict] = []
+    for values in product(
+        enter_prob_thresholds,
+        exit_prob_thresholds,
+        full_prob_thresholds,
+        max_positions,
+        min_holding_hours_list,
+        cooldown_hours_list,
+        drawdown_thresholds,
+        de_risk_positions,
+    ):
+        (
+            enter_prob_threshold,
+            exit_prob_threshold,
+            full_prob_threshold,
+            max_position,
+            min_holding_hours,
+            cooldown_hours,
+            drawdown_de_risk_threshold,
+            de_risk_position,
+        ) = values
+
+        if full_prob_threshold < enter_prob_threshold:
+            continue
+        if enter_prob_threshold < exit_prob_threshold:
+            continue
+        if de_risk_position > max_position:
+            continue
+
+        candidates.append(
+            {
+                "enter_prob_threshold": enter_prob_threshold,
+                "exit_prob_threshold": exit_prob_threshold,
+                "full_prob_threshold": full_prob_threshold,
+                "max_position": max_position,
+                "min_holding_hours": min_holding_hours,
+                "cooldown_hours": cooldown_hours,
+                "drawdown_de_risk_threshold": drawdown_de_risk_threshold,
+                "de_risk_position": de_risk_position,
+            }
+        )
+    return candidates
+
+
 def _default_config_path() -> Path:
     return Path(__file__).resolve().parents[2] / "config.toml"
 
@@ -132,6 +187,17 @@ def build_scan_profile(profile: str, *, config_path: str | Path | None = None) -
             exit_thresholds=[float(value) for value in raw["exit_thresholds"]],
             full_position_thresholds=[float(value) for value in raw["full_position_thresholds"]],
             max_positions=[float(value) for value in raw.get("max_positions", [1.0])],
+            min_holding_hours_list=[int(value) for value in raw["min_holding_hours_list"]],
+            cooldown_hours_list=[int(value) for value in raw["cooldown_hours_list"]],
+            drawdown_thresholds=[float(value) for value in raw["drawdown_thresholds"]],
+            de_risk_positions=[float(value) for value in raw["de_risk_positions"]],
+        )
+    if kind == "probability_grid":
+        return build_probability_parameter_grid(
+            enter_prob_thresholds=[float(value) for value in raw["enter_prob_thresholds"]],
+            exit_prob_thresholds=[float(value) for value in raw["exit_prob_thresholds"]],
+            full_prob_thresholds=[float(value) for value in raw["full_prob_thresholds"]],
+            max_positions=[float(value) for value in raw["max_positions"]],
             min_holding_hours_list=[int(value) for value in raw["min_holding_hours_list"]],
             cooldown_hours_list=[int(value) for value in raw["cooldown_hours_list"]],
             drawdown_thresholds=[float(value) for value in raw["drawdown_thresholds"]],
