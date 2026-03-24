@@ -46,7 +46,7 @@ def _validate_label_config(label: LabelConfig) -> None:
 def _validate_training_config(training: TrainingConfig) -> None:
     if training.run_mode not in {"rolling", "single"}:
         raise ValueError(f"unsupported training run_mode: {training.run_mode}")
-    if training.training_window not in {"all", "2y"}:
+    if training.training_window not in {"all", "2y", "18m", "1y"}:
         raise ValueError(f"unsupported training_window: {training.training_window}")
     if training.run_mode == "rolling" and not training.rolling_step_months:
         raise ValueError("rolling run_mode requires rolling_step_months")

@@ -5,9 +5,12 @@ from tempfile import TemporaryDirectory
 import textwrap
 import unittest
 
+import pandas as pd
+
 from nusri_project.training.lgbm_workflow import (
     build_conf_from_runtime,
     load_training_runtime_bundle,
+    resolve_training_start,
 )
 
 
@@ -54,6 +57,16 @@ run_mode = "rolling"
 training_window = "2y"
 rolling_step_months = 1
 
+[training.rolling_18m_monthly]
+run_mode = "rolling"
+training_window = "18m"
+rolling_step_months = 1
+
+[training.rolling_1y_monthly]
+run_mode = "rolling"
+training_window = "1y"
+rolling_step_months = 1
+
 [training.single_full]
 run_mode = "single"
 training_window = "all"
@@ -95,6 +108,14 @@ label_profile = "regression_72h"
 model_profile = "lgbm_regression_default"
 training_profile = "single_full"
 trade_profile = "return_conservative"
+
+[experiments.cost_aware_18m]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_18m_monthly"
+trade_profile = "prob_conservative"
 """
 
 
@@ -118,6 +139,13 @@ class LgbmWorkflowConfigTests(unittest.TestCase):
         self.assertEqual(bundle.run_mode, "rolling")
         self.assertEqual(bundle.provider_uri, "./qlib_data/my_crypto_data")
 
+    def test_load_training_runtime_bundle_preserves_training_window(self) -> None:
+        config_path = self._write_config()
+
+        bundle = load_training_runtime_bundle(config_path, experiment_name="cost_aware_18m")
+
+        self.assertEqual(bundle.training_window, "18m")
+
     def test_build_conf_from_runtime_for_classification_uses_binary_label(self) -> None:
         config_path = self._write_config()
         bundle = load_training_runtime_bundle(config_path, experiment_name="cost_aware_main")
@@ -139,6 +167,15 @@ class LgbmWorkflowConfigTests(unittest.TestCase):
         self.assertEqual(label_exprs, ["Ref($close, -72) / $close - 1"])
         self.assertEqual(label_names, ["label_72h"])
         self.assertEqual(workflow_conf["task"]["model"]["kwargs"]["loss"], "mse")
+
+    def test_resolve_training_start_supports_year_month_and_all_windows(self) -> None:
+        month_start = pd.Timestamp("2025-03-01 00:00:00")
+        data_start = pd.Timestamp("2019-09-10 08:00:00")
+
+        self.assertEqual(resolve_training_start(month_start, data_start, "2y"), pd.Timestamp("2023-03-01 00:00:00"))
+        self.assertEqual(resolve_training_start(month_start, data_start, "18m"), pd.Timestamp("2023-09-01 00:00:00"))
+        self.assertEqual(resolve_training_start(month_start, data_start, "1y"), pd.Timestamp("2024-03-01 00:00:00"))
+        self.assertEqual(resolve_training_start(month_start, data_start, "all"), data_start)
 
 
 if __name__ == "__main__":

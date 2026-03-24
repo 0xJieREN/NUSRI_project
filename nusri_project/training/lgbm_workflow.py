@@ -60,6 +60,7 @@ class TrainingRuntimeBundle:
     label_horizon_hours: int
     positive_threshold: float
     run_mode: str
+    training_window: str
     provider_uri: str
 
 
@@ -105,8 +106,29 @@ def load_training_runtime_bundle(
         label_horizon_hours=runtime.label.horizon_hours,
         positive_threshold=float(runtime.label.positive_threshold or DEFAULT_COST_AWARE_THRESHOLD),
         run_mode=runtime.training.run_mode,
+        training_window=runtime.training.training_window,
         provider_uri=runtime.data.provider_uri,
     )
+
+
+def resolve_training_start(
+    month_start: pd.Timestamp,
+    data_start_ts: pd.Timestamp,
+    training_window: str,
+) -> pd.Timestamp:
+    if training_window == "all":
+        return data_start_ts
+    if training_window == "2y":
+        train_start = month_start - pd.DateOffset(years=2)
+    elif training_window == "18m":
+        train_start = month_start - pd.DateOffset(months=18)
+    elif training_window == "1y":
+        train_start = month_start - pd.DateOffset(years=1)
+    else:
+        raise ValueError(f"unsupported training_window: {training_window}")
+    if train_start < data_start_ts:
+        return data_start_ts
+    return train_start
 
 
 def build_conf_from_runtime(runtime: ExperimentRuntimeConfig) -> dict:
@@ -348,6 +370,7 @@ def run_rolling_monthly(
     label_horizon_hours: int = DEFAULT_LABEL_HORIZON_HOURS,
     label_mode: str = DEFAULT_LABEL_MODE,
     positive_threshold: float = DEFAULT_COST_AWARE_THRESHOLD,
+    training_window: str = "2y",
     prediction_output_dir: str | None = None,
 ):
     workflow_conf = conf if workflow_conf is None else workflow_conf
@@ -367,9 +390,7 @@ def run_rolling_monthly(
             month_end = end_ts
 
         train_end = month_start - pd.Timedelta(hours=1)
-        train_start = month_start - pd.DateOffset(years=ROLLING_TRAIN_YEARS)
-        if train_start < data_start_ts:
-            train_start = data_start_ts
+        train_start = resolve_training_start(month_start, data_start_ts, training_window)
 
         month_start_dt = cast(datetime, month_start.to_pydatetime())
         month_end_dt = cast(datetime, month_end.to_pydatetime())
@@ -442,6 +463,7 @@ def main() -> int:
     label_mode = args.label_mode
     positive_threshold = args.cost_aware_threshold
     run_mode = args.run_mode
+    training_window = "2y"
     provider_uri = args.provider_uri
 
     if args.config is not None:
@@ -452,6 +474,7 @@ def main() -> int:
         label_mode = bundle.label_mode
         positive_threshold = bundle.positive_threshold
         run_mode = bundle.run_mode
+        training_window = bundle.training_window
         provider_uri = bundle.provider_uri
     else:
         workflow_conf = build_conf(
@@ -475,6 +498,7 @@ def main() -> int:
             label_horizon_hours=label_horizon_hours,
             label_mode=label_mode,
             positive_threshold=positive_threshold,
+            training_window=training_window,
             prediction_output_dir=args.prediction_output_dir,
         )
     else:

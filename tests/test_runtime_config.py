@@ -71,6 +71,16 @@ run_mode = "rolling"
 training_window = "2y"
 rolling_step_months = 1
 
+[training.rolling_18m_monthly]
+run_mode = "rolling"
+training_window = "18m"
+rolling_step_months = 1
+
+[training.rolling_1y_monthly]
+run_mode = "rolling"
+training_window = "1y"
+rolling_step_months = 1
+
 [training.single_full]
 run_mode = "single"
 training_window = "all"
@@ -119,6 +129,22 @@ factor_profile = "top23"
 label_profile = "classification_72h_costaware_006"
 model_profile = "lgbm_binary_default"
 training_profile = "rolling_2y_monthly"
+trade_profile = "prob_conservative"
+
+[experiments.cost_aware_18m]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware_006"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_18m_monthly"
+trade_profile = "prob_conservative"
+
+[experiments.cost_aware_1y]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware_006"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_1y_monthly"
 trade_profile = "prob_conservative"
 
 [experiments.regression_main]
@@ -192,6 +218,15 @@ class RuntimeConfigTests(unittest.TestCase):
         self.assertAlmostEqual(loose.label.safety_margin or 0.0, 0.002)
         self.assertAlmostEqual(strict.label.positive_threshold or 0.0, 0.006)
         self.assertAlmostEqual(strict.label.safety_margin or 0.0, 0.004)
+
+    def test_load_runtime_config_supports_18m_and_1y_training_windows(self) -> None:
+        config_path = self._write_config()
+
+        runtime_18m = load_runtime_config(config_path, experiment_name="cost_aware_18m")
+        runtime_1y = load_runtime_config(config_path, experiment_name="cost_aware_1y")
+
+        self.assertEqual(runtime_18m.training.training_window, "18m")
+        self.assertEqual(runtime_1y.training.training_window, "1y")
 
     def test_invalid_probability_trade_threshold_order_raises_value_error(self) -> None:
         config_path = self._write_config(
