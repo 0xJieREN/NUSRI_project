@@ -1,7 +1,7 @@
 [defaults]
 data_profile = "btc_1h_full"
 factor_profile = "top23"
-label_profile = "classification_72h_costaware"
+label_profile = "classification_72h_costaware_006"
 model_profile = "lgbm_binary_default"
 training_profile = "rolling_2y_monthly"
 trade_profile = "prob_conservative"
@@ -148,7 +148,7 @@ de_risk_position = 0.0
 [experiments.cost_aware_main]
 data_profile = "btc_1h_full"
 factor_profile = "top23"
-label_profile = "classification_72h_costaware"
+label_profile = "classification_72h_costaware_006"
 model_profile = "lgbm_binary_default"
 training_profile = "rolling_2y_monthly"
 trade_profile = "prob_conservative"
@@ -251,6 +251,17 @@ enter_prob_thresholds = [0.58, 0.62, 0.65]
 exit_prob_thresholds = [0.45, 0.50]
 full_prob_thresholds = [0.72, 0.80]
 max_positions = [0.15, 0.25]
+min_holding_hours_list = [48]
+cooldown_hours_list = [12]
+drawdown_thresholds = [0.02]
+de_risk_positions = [0.0]
+
+[scan_profiles.prob_trade_tuning_006_quick]
+kind = "probability_grid"
+enter_prob_thresholds = [0.52, 0.58, 0.64]
+exit_prob_thresholds = [0.45, 0.50]
+full_prob_thresholds = [0.68, 0.76]
+max_positions = [0.15, 0.25, 0.35]
 min_holding_hours_list = [48]
 cooldown_hours_list = [12]
 drawdown_thresholds = [0.02]

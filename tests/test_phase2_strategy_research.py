@@ -298,6 +298,27 @@ class Phase2StrategyResearchTests(unittest.TestCase):
         self.assertTrue(all(candidate["full_prob_threshold"] >= candidate["enter_prob_threshold"] for candidate in grid))
         self.assertTrue(all(candidate["enter_prob_threshold"] >= candidate["exit_prob_threshold"] for candidate in grid))
 
+    def test_build_scan_profile_probability_grid_006_quick_stays_small(self) -> None:
+        config_path = self._write_config(
+            """
+            [scan_profiles.prob_trade_tuning_006_quick]
+            kind = "probability_grid"
+            enter_prob_thresholds = [0.52, 0.58, 0.64]
+            exit_prob_thresholds = [0.45, 0.50]
+            full_prob_thresholds = [0.68, 0.76]
+            max_positions = [0.15, 0.25, 0.35]
+            min_holding_hours_list = [48]
+            cooldown_hours_list = [12]
+            drawdown_thresholds = [0.02]
+            de_risk_positions = [0.0]
+            """
+        )
+        grid = build_scan_profile("prob_trade_tuning_006_quick", config_path=config_path)
+
+        self.assertEqual(len(grid), 36)
+        self.assertTrue(all(candidate["enter_prob_threshold"] in {0.52, 0.58, 0.64} for candidate in grid))
+        self.assertTrue(all(candidate["full_prob_threshold"] in {0.68, 0.76} for candidate in grid))
+
     def test_build_scan_profile_raises_for_missing_profile(self) -> None:
         config_path = self._write_config("")
 
