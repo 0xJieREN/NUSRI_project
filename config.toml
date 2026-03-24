@@ -103,6 +103,16 @@ run_mode = "rolling"
 training_window = "2y"
 rolling_step_months = 1
 
+[training.rolling_18m_monthly]
+run_mode = "rolling"
+training_window = "18m"
+rolling_step_months = 1
+
+[training.rolling_1y_monthly]
+run_mode = "rolling"
+training_window = "1y"
+rolling_step_months = 1
+
 [training.single_full]
 run_mode = "single"
 training_window = "all"
@@ -205,6 +215,22 @@ factor_profile = "top10"
 label_profile = "classification_72h_costaware_006"
 model_profile = "lgbm_binary_default"
 training_profile = "rolling_2y_monthly"
+trade_profile = "prob_conservative"
+
+[experiments.cost_aware_18m]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware_006"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_18m_monthly"
+trade_profile = "prob_conservative"
+
+[experiments.cost_aware_1y]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware_006"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_1y_monthly"
 trade_profile = "prob_conservative"
 
 [scan_profiles.small]
