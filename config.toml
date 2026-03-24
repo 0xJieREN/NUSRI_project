@@ -1,7 +1,7 @@
 [defaults]
 data_profile = "btc_1h_full"
 factor_profile = "top23"
-label_profile = "classification_72h_costaware_006"
+label_profile = "classification_72h_costaware"
 model_profile = "lgbm_binary_default"
 training_profile = "rolling_2y_monthly"
 trade_profile = "prob_conservative"
@@ -40,12 +40,6 @@ feature_set = "alpha261"
 [factors.top23]
 feature_set = "top23"
 
-[factors.top15]
-feature_set = "top15"
-
-[factors.top10]
-feature_set = "top10"
-
 [labels.regression_8h]
 kind = "regression"
 horizon_hours = 8
@@ -66,27 +60,6 @@ horizon_hours = 72
 kind = "classification_costaware"
 horizon_hours = 72
 round_trip_cost = 0.002
-safety_margin = 0.003
-positive_threshold = 0.005
-
-[labels.classification_72h_costaware_004]
-kind = "classification_costaware"
-horizon_hours = 72
-round_trip_cost = 0.002
-safety_margin = 0.002
-positive_threshold = 0.004
-
-[labels.classification_72h_costaware_005]
-kind = "classification_costaware"
-horizon_hours = 72
-round_trip_cost = 0.002
-safety_margin = 0.003
-positive_threshold = 0.005
-
-[labels.classification_72h_costaware_006]
-kind = "classification_costaware"
-horizon_hours = 72
-round_trip_cost = 0.002
 safety_margin = 0.004
 positive_threshold = 0.006
 
@@ -101,16 +74,6 @@ objective = "binary"
 [training.rolling_2y_monthly]
 run_mode = "rolling"
 training_window = "2y"
-rolling_step_months = 1
-
-[training.rolling_18m_monthly]
-run_mode = "rolling"
-training_window = "18m"
-rolling_step_months = 1
-
-[training.rolling_1y_monthly]
-run_mode = "rolling"
-training_window = "1y"
 rolling_step_months = 1
 
 [training.single_full]
@@ -164,7 +127,7 @@ de_risk_position = 0.0
 [experiments.cost_aware_main]
 data_profile = "btc_1h_full"
 factor_profile = "top23"
-label_profile = "classification_72h_costaware_006"
+label_profile = "classification_72h_costaware"
 model_profile = "lgbm_binary_default"
 training_profile = "rolling_2y_monthly"
 trade_profile = "prob_conservative"
@@ -176,62 +139,6 @@ label_profile = "regression_72h"
 model_profile = "lgbm_regression_default"
 training_profile = "rolling_2y_monthly"
 trade_profile = "return_conservative"
-
-[experiments.cost_aware_thr_004]
-data_profile = "btc_1h_full"
-factor_profile = "top23"
-label_profile = "classification_72h_costaware_004"
-model_profile = "lgbm_binary_default"
-training_profile = "rolling_2y_monthly"
-trade_profile = "prob_conservative"
-
-[experiments.cost_aware_thr_005]
-data_profile = "btc_1h_full"
-factor_profile = "top23"
-label_profile = "classification_72h_costaware_005"
-model_profile = "lgbm_binary_default"
-training_profile = "rolling_2y_monthly"
-trade_profile = "prob_conservative"
-
-[experiments.cost_aware_thr_006]
-data_profile = "btc_1h_full"
-factor_profile = "top23"
-label_profile = "classification_72h_costaware_006"
-model_profile = "lgbm_binary_default"
-training_profile = "rolling_2y_monthly"
-trade_profile = "prob_conservative"
-
-[experiments.cost_aware_top15]
-data_profile = "btc_1h_full"
-factor_profile = "top15"
-label_profile = "classification_72h_costaware_006"
-model_profile = "lgbm_binary_default"
-training_profile = "rolling_2y_monthly"
-trade_profile = "prob_conservative"
-
-[experiments.cost_aware_top10]
-data_profile = "btc_1h_full"
-factor_profile = "top10"
-label_profile = "classification_72h_costaware_006"
-model_profile = "lgbm_binary_default"
-training_profile = "rolling_2y_monthly"
-trade_profile = "prob_conservative"
-
-[experiments.cost_aware_18m]
-data_profile = "btc_1h_full"
-factor_profile = "top23"
-label_profile = "classification_72h_costaware_006"
-model_profile = "lgbm_binary_default"
-training_profile = "rolling_18m_monthly"
-trade_profile = "prob_conservative"
-
-[experiments.cost_aware_1y]
-data_profile = "btc_1h_full"
-factor_profile = "top23"
-label_profile = "classification_72h_costaware_006"
-model_profile = "lgbm_binary_default"
-training_profile = "rolling_1y_monthly"
-trade_profile = "prob_conservative"
 
 [scan_profiles.small]
 kind = "grid"
@@ -283,28 +190,6 @@ min_holding_hours_list = [48, 72]
 cooldown_hours = 12
 
 [scan_profiles.prob_trade_tuning_fast]
-kind = "probability_grid"
-enter_prob_thresholds = [0.58, 0.62, 0.65]
-exit_prob_thresholds = [0.45, 0.50]
-full_prob_thresholds = [0.72, 0.80]
-max_positions = [0.15, 0.25]
-min_holding_hours_list = [24, 48]
-cooldown_hours_list = [12]
-drawdown_thresholds = [0.02, 0.04]
-de_risk_positions = [0.0, 0.10]
-
-[scan_profiles.prob_trade_tuning_quick]
-kind = "probability_grid"
-enter_prob_thresholds = [0.58, 0.62, 0.65]
-exit_prob_thresholds = [0.45, 0.50]
-full_prob_thresholds = [0.72, 0.80]
-max_positions = [0.15, 0.25]
-min_holding_hours_list = [48]
-cooldown_hours_list = [12]
-drawdown_thresholds = [0.02]
-de_risk_positions = [0.0]
-
-[scan_profiles.prob_trade_tuning_006_quick]
 kind = "probability_grid"
 enter_prob_thresholds = [0.52, 0.58, 0.64]
 exit_prob_thresholds = [0.45, 0.50]

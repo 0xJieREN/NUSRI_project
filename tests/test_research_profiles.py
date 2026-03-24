@@ -13,7 +13,6 @@ from nusri_project.training.label_factory import (
     get_prediction_output_column,
 )
 from nusri_project.training.model_factory import get_model_loss
-from nusri_project.config.alpha261_config import get_top10_config, get_top15_config, get_top23_config
 from nusri_project.strategy.cost_aware_label_round1 import (
     build_cost_aware_round1_matrix,
     build_cost_aware_round1_modes,
@@ -52,16 +51,6 @@ class ResearchProfilesTests(unittest.TestCase):
         self.assertEqual(shells["balanced"]["signal_kind"], "probability")
         self.assertEqual(shells["balanced"]["enter_prob_threshold"], 0.65)
         self.assertEqual(shells["balanced"]["full_prob_threshold"], 0.80)
-
-    def test_top15_and_top10_are_strict_subsets_of_top23(self) -> None:
-        _, top23_names = get_top23_config()
-        _, top15_names = get_top15_config()
-        _, top10_names = get_top10_config()
-
-        self.assertEqual(len(top15_names), 15)
-        self.assertEqual(len(top10_names), 10)
-        self.assertTrue(set(top15_names).issubset(set(top23_names)))
-        self.assertTrue(set(top10_names).issubset(set(top15_names)))
 
     def test_build_prediction_artifact_name_inputs_still_match_label_helpers(self) -> None:
         self.assertEqual(get_cost_aware_binary_label_expr(72, 0.005), "If(Gt(Ref($close, -72) / $close - 1, 0.005), 1, 0)")
