@@ -63,6 +63,27 @@ round_trip_cost = 0.002
 safety_margin = 0.003
 positive_threshold = 0.005
 
+[labels.classification_72h_costaware_004]
+kind = "classification_costaware"
+horizon_hours = 72
+round_trip_cost = 0.002
+safety_margin = 0.002
+positive_threshold = 0.004
+
+[labels.classification_72h_costaware_005]
+kind = "classification_costaware"
+horizon_hours = 72
+round_trip_cost = 0.002
+safety_margin = 0.003
+positive_threshold = 0.005
+
+[labels.classification_72h_costaware_006]
+kind = "classification_costaware"
+horizon_hours = 72
+round_trip_cost = 0.002
+safety_margin = 0.004
+positive_threshold = 0.006
+
 [models.lgbm_regression_default]
 model_type = "lightgbm"
 objective = "mse"
@@ -139,6 +160,30 @@ label_profile = "regression_72h"
 model_profile = "lgbm_regression_default"
 training_profile = "rolling_2y_monthly"
 trade_profile = "return_conservative"
+
+[experiments.cost_aware_thr_004]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware_004"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_2y_monthly"
+trade_profile = "prob_conservative"
+
+[experiments.cost_aware_thr_005]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware_005"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_2y_monthly"
+trade_profile = "prob_conservative"
+
+[experiments.cost_aware_thr_006]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware_006"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_2y_monthly"
+trade_profile = "prob_conservative"
 
 [scan_profiles.small]
 kind = "grid"

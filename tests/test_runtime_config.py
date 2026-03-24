@@ -44,6 +44,20 @@ round_trip_cost = 0.002
 safety_margin = 0.003
 positive_threshold = 0.005
 
+[labels.classification_72h_costaware_004]
+kind = "classification_costaware"
+horizon_hours = 72
+round_trip_cost = 0.002
+safety_margin = 0.002
+positive_threshold = 0.004
+
+[labels.classification_72h_costaware_006]
+kind = "classification_costaware"
+horizon_hours = 72
+round_trip_cost = 0.002
+safety_margin = 0.004
+positive_threshold = 0.006
+
 [models.lgbm_binary_default]
 model_type = "lightgbm"
 objective = "binary"
@@ -87,6 +101,22 @@ de_risk_position = 0.10
 data_profile = "btc_1h_full"
 factor_profile = "top23"
 label_profile = "classification_72h_costaware"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_2y_monthly"
+trade_profile = "prob_conservative"
+
+[experiments.cost_aware_004]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware_004"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_2y_monthly"
+trade_profile = "prob_conservative"
+
+[experiments.cost_aware_006]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware_006"
 model_profile = "lgbm_binary_default"
 training_profile = "rolling_2y_monthly"
 trade_profile = "prob_conservative"
@@ -151,6 +181,17 @@ class RuntimeConfigTests(unittest.TestCase):
         self.assertAlmostEqual(runtime.trade.exit_prob_threshold or 0.0, 0.50)
         self.assertAlmostEqual(runtime.trade.full_prob_threshold or 0.0, 0.80)
         self.assertAlmostEqual(runtime.trade.max_position, 0.15)
+
+    def test_load_runtime_config_can_select_loose_and_strict_costaware_profiles(self) -> None:
+        config_path = self._write_config()
+
+        loose = load_runtime_config(config_path, experiment_name="cost_aware_004")
+        strict = load_runtime_config(config_path, experiment_name="cost_aware_006")
+
+        self.assertAlmostEqual(loose.label.positive_threshold or 0.0, 0.004)
+        self.assertAlmostEqual(loose.label.safety_margin or 0.0, 0.002)
+        self.assertAlmostEqual(strict.label.positive_threshold or 0.0, 0.006)
+        self.assertAlmostEqual(strict.label.safety_margin or 0.0, 0.004)
 
     def test_invalid_probability_trade_threshold_order_raises_value_error(self) -> None:
         config_path = self._write_config(
