@@ -40,6 +40,12 @@ feature_set = "alpha261"
 [factors.top23]
 feature_set = "top23"
 
+[factors.top15]
+feature_set = "top15"
+
+[factors.top10]
+feature_set = "top10"
+
 [labels.regression_8h]
 kind = "regression"
 horizon_hours = 8
@@ -180,6 +186,22 @@ trade_profile = "prob_conservative"
 [experiments.cost_aware_thr_006]
 data_profile = "btc_1h_full"
 factor_profile = "top23"
+label_profile = "classification_72h_costaware_006"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_2y_monthly"
+trade_profile = "prob_conservative"
+
+[experiments.cost_aware_top15]
+data_profile = "btc_1h_full"
+factor_profile = "top15"
+label_profile = "classification_72h_costaware_006"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_2y_monthly"
+trade_profile = "prob_conservative"
+
+[experiments.cost_aware_top10]
+data_profile = "btc_1h_full"
+factor_profile = "top10"
 label_profile = "classification_72h_costaware_006"
 model_profile = "lgbm_binary_default"
 training_profile = "rolling_2y_monthly"

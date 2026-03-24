@@ -10,7 +10,12 @@ import qlib
 from qlib.constant import REG_CN
 from qlib.utils import init_instance_by_config
 from qlib.workflow import R
-from nusri_project.config.alpha261_config import get_alpha261_config, get_top23_config
+from nusri_project.config.alpha261_config import (
+    get_alpha261_config,
+    get_top10_config,
+    get_top15_config,
+    get_top23_config,
+)
 from nusri_project.config.runtime_config import load_runtime_config
 from nusri_project.config.schemas import ExperimentRuntimeConfig
 from nusri_project.training.label_factory import (
@@ -65,6 +70,10 @@ def init_qlib(provider_uri: str = PROVIDER_URI) -> None:
 def get_feature_config(feature_set: str):
     if feature_set == "alpha261":
         return get_alpha261_config()
+    if feature_set == "top10":
+        return get_top10_config()
+    if feature_set == "top15":
+        return get_top15_config()
     if feature_set == "top23":
         return get_top23_config()
     raise ValueError(f"Unknown FEATURE_SET: {feature_set}")

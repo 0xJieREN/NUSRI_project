@@ -358,6 +358,63 @@ def get_top23_config() -> Tuple[List[str], List[str]]:
     return exprs, names
 
 
+def _build_named_factor_config(selected_names: List[str]) -> Tuple[List[str], List[str]]:
+    expr_map = _alpha158_expr_map()
+    new_factors = {name: expr for expr, name in _new_factor_exprs()}
+
+    exprs: List[str] = []
+    names: List[str] = []
+
+    for name in selected_names:
+        if name in expr_map:
+            expr = expr_map[name]
+        elif name in new_factors:
+            expr = new_factors[name]
+        else:
+            raise ValueError(f"unknown factor name: {name}")
+        names.append(name)
+        exprs.append(expr)
+
+    return exprs, names
+
+
+def get_top15_config() -> Tuple[List[str], List[str]]:
+    top15_names = [
+        "OBV20",
+        "FRG20_72",
+        "STD60",
+        "MDD60",
+        "NATR30",
+        "VOV60",
+        "IMXD30",
+        "GKVOL60",
+        "ADX14",
+        "FZ72",
+        "FMO72",
+        "LOWSHADOW20",
+        "VWAPDEV60",
+        "CORR20",
+        "FZ240",
+    ]
+    return _build_named_factor_config(top15_names)
+
+
+def get_top10_config() -> Tuple[List[str], List[str]]:
+    top10_names = [
+        "OBV20",
+        "FRG20_72",
+        "STD60",
+        "MDD60",
+        "NATR30",
+        "VOV60",
+        "IMXD30",
+        "GKVOL60",
+        "ADX14",
+        "FZ72",
+    ]
+    return _build_named_factor_config(top10_names)
+
+
 def get_alpha261_feature_count() -> int:
     exprs, _ = get_alpha261_config()
     return len(exprs)
