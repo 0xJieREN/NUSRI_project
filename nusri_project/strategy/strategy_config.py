@@ -24,6 +24,11 @@ class SpotStrategyConfig:
     enter_prob_threshold: float | None = None
     exit_prob_threshold: float | None = None
     full_prob_threshold: float | None = None
+    open_score: float | None = None
+    close_score: float | None = None
+    size_floor_score: float | None = None
+    size_full_score: float | None = None
+    curve_gamma: float = 1.0
     min_holding_hours: int = 24
     cooldown_hours: int = 12
     max_position: float = 1.0
@@ -54,8 +59,22 @@ class SpotStrategyConfig:
                 raise ValueError("probability signal config requires enter_prob_threshold, exit_prob_threshold, and full_prob_threshold")
             if not 0 <= self.exit_prob_threshold <= self.enter_prob_threshold <= self.full_prob_threshold <= 1:
                 raise ValueError("probability thresholds must satisfy 0 <= exit_prob_threshold <= enter_prob_threshold <= full_prob_threshold <= 1")
+        elif self.signal_kind == "score":
+            if (
+                self.open_score is None
+                or self.close_score is None
+                or self.size_floor_score is None
+                or self.size_full_score is None
+            ):
+                raise ValueError("score signal config requires open_score, close_score, size_floor_score, and size_full_score")
+            if self.open_score < self.close_score:
+                raise ValueError("score thresholds must satisfy open_score >= close_score")
+            if self.size_full_score <= self.size_floor_score:
+                raise ValueError("score thresholds must satisfy size_full_score > size_floor_score")
+            if self.curve_gamma <= 0:
+                raise ValueError("curve_gamma must be positive")
         else:
-            raise ValueError("signal_kind must be either 'return' or 'probability'")
+            raise ValueError("signal_kind must be one of 'return', 'probability', or 'score'")
         if self.min_holding_hours < 0:
             raise ValueError("min_holding_hours must be non-negative")
         if self.cooldown_hours < 0:
@@ -92,6 +111,11 @@ def build_spot_strategy_config_from_runtime(
         enter_prob_threshold=trade.enter_prob_threshold,
         exit_prob_threshold=trade.exit_prob_threshold,
         full_prob_threshold=trade.full_prob_threshold,
+        open_score=getattr(trade, "open_score", None),
+        close_score=getattr(trade, "close_score", None),
+        size_floor_score=getattr(trade, "size_floor_score", None),
+        size_full_score=getattr(trade, "size_full_score", None),
+        curve_gamma=float(getattr(trade, "curve_gamma", 1.0)),
         min_holding_hours=trade.min_holding_hours,
         cooldown_hours=trade.cooldown_hours,
         max_position=trade.max_position,

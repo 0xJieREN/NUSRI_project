@@ -103,6 +103,27 @@ def build_backtest_components(
                 "risk_degree": 1.0,
             },
         }
+    elif config.signal_kind == "score":
+        strategy_config = {
+            "class": "QlibScoreLongFlatStrategy",
+            "module_path": "nusri_project.strategy.score_signal_strategy",
+            "kwargs": {
+                "signal": signal,
+                "instrument": config.instrument,
+                "time_per_step": config.freq,
+                "open_score": config.open_score,
+                "close_score": config.close_score,
+                "size_floor_score": config.size_floor_score,
+                "size_full_score": config.size_full_score,
+                "curve_gamma": config.curve_gamma,
+                "min_holding_hours": config.min_holding_hours,
+                "cooldown_hours": config.cooldown_hours,
+                "max_position": config.max_position,
+                "drawdown_de_risk_threshold": config.drawdown_de_risk_threshold,
+                "de_risk_position": config.de_risk_position,
+                "risk_degree": 1.0,
+            },
+        }
     else:
         strategy_config = {
             "class": "QlibReturnLongFlatStrategy",
@@ -325,7 +346,11 @@ def main() -> int:
     config.validate()
 
     prediction_paths = _expand_prediction_globs(args.pred_glob)
-    signal_column = "pred_prob" if config.signal_kind == "probability" else "pred_return"
+    signal_column = {
+        "probability": "pred_prob",
+        "return": "pred_return",
+        "score": "pred_score",
+    }[config.signal_kind]
     combined = load_prediction_frames(prediction_paths, signal_column=signal_column)
     signal = prepare_signal_frame(combined, instrument=config.instrument, signal_column=signal_column)
     report, positions, indicators = run_qlib_backtest(signal, config)

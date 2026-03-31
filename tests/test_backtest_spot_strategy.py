@@ -59,6 +59,22 @@ class SpotBacktestTests(unittest.TestCase):
         self.assertAlmostEqual(float(signal.iloc[0, 0]), 0.67)
         self.assertAlmostEqual(float(signal.iloc[1, 0]), 0.81)
 
+    def test_prepare_signal_frame_can_use_score_signal_column(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "pred_score": [0.81, 0.67],
+                "real_return": [0.03, -0.01],
+            },
+            index=pd.to_datetime(["2024-01-01 02:00:00", "2024-01-01 01:00:00"]),
+        )
+
+        normalized = normalize_prediction_frame(frame, signal_column="pred_score")
+        signal = prepare_signal_frame(normalized, instrument="BTCUSDT", signal_column="pred_score")
+
+        self.assertEqual(list(signal.columns), ["score"])
+        self.assertAlmostEqual(float(signal.iloc[0, 0]), 0.67)
+        self.assertAlmostEqual(float(signal.iloc[1, 0]), 0.81)
+
     def test_compute_target_weight_from_return_signal_applies_thresholds_and_guards(self) -> None:
         self.assertEqual(
             compute_target_weight_from_return_signal(
@@ -256,6 +272,31 @@ class SpotBacktestTests(unittest.TestCase):
         self.assertEqual(strategy_config["kwargs"]["enter_prob_threshold"], 0.65)
         self.assertEqual(strategy_config["kwargs"]["full_prob_threshold"], 0.80)
 
+    def test_build_backtest_components_uses_score_signal_column(self) -> None:
+        signal = pd.DataFrame(
+            {"score": [0.60]},
+            index=pd.MultiIndex.from_tuples(
+                [("BTCUSDT", pd.Timestamp("2024-01-01 00:00:00"))],
+                names=["instrument", "datetime"],
+            ),
+        )
+        config = SpotStrategyConfig(
+            signal_kind="score",
+            open_score=0.4,
+            close_score=0.2,
+            size_floor_score=0.4,
+            size_full_score=0.8,
+            curve_gamma=1.5,
+            max_position=0.25,
+        )
+
+        strategy_config, _, _ = build_backtest_components(signal, config)
+
+        self.assertEqual(strategy_config["class"], "QlibScoreLongFlatStrategy")
+        self.assertEqual(strategy_config["module_path"], "nusri_project.strategy.score_signal_strategy")
+        self.assertEqual(strategy_config["kwargs"]["open_score"], 0.4)
+        self.assertEqual(strategy_config["kwargs"]["curve_gamma"], 1.5)
+
     def test_summarize_report_uses_net_returns_and_custom_scaler(self) -> None:
         report = pd.DataFrame(
             {
@@ -306,6 +347,18 @@ class SpotBacktestTests(unittest.TestCase):
             combined = load_prediction_frames([pred_path], signal_column="pred_prob")
 
         self.assertIn("pred_prob", combined.columns)
+
+    def test_load_prediction_frames_accepts_score_signal_column(self) -> None:
+        with TemporaryDirectory() as tmp:
+            pred_path = Path(tmp) / "pred_202401.pkl"
+            pd.DataFrame(
+                {"pred_score": [0.81]},
+                index=pd.to_datetime(["2024-01-01 00:00:00"]),
+            ).to_pickle(pred_path)
+
+            combined = load_prediction_frames([pred_path], signal_column="pred_score")
+
+        self.assertIn("pred_score", combined.columns)
 
     def test_align_backtest_window_moves_end_before_last_signal_bar(self) -> None:
         signal = pd.DataFrame(
