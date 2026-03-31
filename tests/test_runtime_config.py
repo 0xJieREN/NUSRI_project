@@ -444,6 +444,15 @@ class RuntimeConfigTests(unittest.TestCase):
         self.assertEqual(runtime.trade.signal_kind, "score")
         self.assertAlmostEqual(runtime.trade.max_position, 0.15)
 
+    def test_repo_config_regression_fused_main_resolves_only_two_regression_components(self) -> None:
+        runtime = load_fused_runtime_config(REPO_CONFIG_PATH, experiment_name="regression_fused_main")
+
+        self.assertEqual(
+            tuple(component.name for component in runtime.components),
+            ("reg_24h", "reg_72h"),
+        )
+        self.assertEqual(runtime.fusion.output_column, "pred_score")
+
     def test_repo_config_costaware_fused_main_resolves_only_two_costaware_components(self) -> None:
         runtime = load_fused_runtime_config(REPO_CONFIG_PATH, experiment_name="costaware_fused_main")
 
