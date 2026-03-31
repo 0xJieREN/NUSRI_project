@@ -51,7 +51,7 @@ class FusedSignalWorkflowTests(unittest.TestCase):
             ),
             fusion=FusionProfileConfig(
                 name="regression_fused_main",
-                components=("reg_24h", "cls_72h"),
+                components=("reg_24h", "reg_72h"),
                 weights=(0.4, 0.6),
                 component_transform="robust_norm_clip",
                 transform_fit_scope="train_only",
@@ -71,20 +71,16 @@ class FusedSignalWorkflowTests(unittest.TestCase):
                     ),
                 ),
                 SignalComponentRuntimeConfig(
-                    name="cls_72h",
+                    name="reg_72h",
                     factor=FactorConfig(feature_set="top23"),
-                    label=LabelConfig(
-                        kind="classification_costaware",
-                        horizon_hours=72,
-                        round_trip_cost=0.002,
-                        safety_margin=0.004,
-                        positive_threshold=0.006,
-                    ),
-                    model=ModelConfig(model_type="lightgbm", objective="binary"),
+                    label=LabelConfig(kind="regression", horizon_hours=72),
+                    model=ModelConfig(model_type="lightgbm", objective="mse"),
                     training=TrainingConfig(
                         run_mode="rolling",
                         training_window_months=24,
                         rolling_step_months=1,
+                        sample_weight_mode="exp_halflife",
+                        half_life_months=6,
                     ),
                 ),
             ),
@@ -226,7 +222,7 @@ class FusedSignalWorkflowTests(unittest.TestCase):
             )
 
     def test_run_fused_signal_workflow_transforms_components_fuses_and_caches_artifacts(self) -> None:
-        train_reg = pd.DataFrame(
+        train_24h = pd.DataFrame(
             {"pred_return": [0.0, 1.0, 2.0, 3.0], "real_return": [0.01, 0.02, 0.03, 0.04]},
             index=self._index(
                 "2023-09-30 23:00:00",
@@ -235,12 +231,12 @@ class FusedSignalWorkflowTests(unittest.TestCase):
                 "2023-12-31 23:00:00",
             ),
         )
-        test_reg = pd.DataFrame(
+        test_24h = pd.DataFrame(
             {"pred_return": [3.0, 4.0], "real_return": [0.08, 0.12]},
             index=self._index("2024-01-31 23:00:00", "2024-02-29 23:00:00"),
         )
-        train_cls = pd.DataFrame(
-            {"pred_prob": [0.2, 0.4, 0.6, 0.8], "real_return": [0.01, 0.02, 0.03, 0.04]},
+        train_72h = pd.DataFrame(
+            {"pred_return": [1.0, 2.0, 3.0, 4.0], "real_return": [0.01, 0.02, 0.03, 0.04]},
             index=self._index(
                 "2023-09-30 23:00:00",
                 "2023-10-31 23:00:00",
@@ -248,25 +244,33 @@ class FusedSignalWorkflowTests(unittest.TestCase):
                 "2023-12-31 23:00:00",
             ),
         )
-        test_cls = pd.DataFrame(
-            {"pred_prob": [0.7, 0.9], "real_return": [0.08, 0.12]},
+        test_72h = pd.DataFrame(
+            {"pred_return": [4.0, 5.0], "real_return": [0.09, 0.13]},
             index=self._index("2024-01-31 23:00:00", "2024-02-29 23:00:00"),
         )
-        expected_reg = apply_component_transform(
-            test_reg["pred_return"],
+        expected_24h = apply_component_transform(
+            test_24h["pred_return"],
             transform="robust_norm_clip",
             params={"median": 1.5, "scale": 1.4826, "clip_value": 3.0},
             clip_value=3.0,
         )
-        expected_cls = apply_component_transform(
-            test_cls["pred_prob"],
+        expected_72h = apply_component_transform(
+            test_72h["pred_return"],
             transform="robust_norm_clip",
-            params={"median": 0.5, "scale": 0.29652, "clip_value": 3.0},
+            params={"median": 2.5, "scale": 1.4826, "clip_value": 3.0},
             clip_value=3.0,
         )
 
         with TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
+
+            def build_predictions_for_component(component, **_kwargs):
+                component_frames = {
+                    "reg_24h": (train_24h, test_24h),
+                    "reg_72h": (train_72h, test_72h),
+                }
+                return component_frames[component.name]
+
             with (
                 patch(
                     "nusri_project.training.fused_signal_workflow.load_fused_runtime_config",
@@ -279,7 +283,7 @@ class FusedSignalWorkflowTests(unittest.TestCase):
                 ),
                 patch(
                     "nusri_project.training.fused_signal_workflow._build_component_predictions_for_month",
-                    side_effect=[(train_reg, test_reg), (train_cls, test_cls)],
+                    side_effect=build_predictions_for_component,
                 ) as build_predictions,
             ):
                 yearly_results = run_fused_signal_workflow(
@@ -288,11 +292,15 @@ class FusedSignalWorkflowTests(unittest.TestCase):
                     prediction_output_dir=output_dir,
                 )
             self.assertEqual(build_predictions.call_count, 2)
+            self.assertEqual(
+                tuple(call.args[0].name for call in build_predictions.call_args_list),
+                ("reg_24h", "reg_72h"),
+            )
             fused = yearly_results["2024"][0]
             self.assertIn("pred_score", fused.columns)
             self.assertIn("real_return", fused.columns)
 
-            expected_score = (expected_reg * 0.4 + expected_cls * 0.6) / 1.0
+            expected_score = (expected_24h * 0.4 + expected_72h * 0.6) / 1.0
             pd.testing.assert_series_equal(
                 fused["pred_score"],
                 expected_score.rename("pred_score"),
@@ -300,7 +308,7 @@ class FusedSignalWorkflowTests(unittest.TestCase):
             )
             pd.testing.assert_series_equal(
                 fused["real_return"],
-                test_reg["real_return"],
+                test_72h["real_return"],
                 check_names=True,
             )
 
@@ -347,8 +355,8 @@ class FusedSignalWorkflowTests(unittest.TestCase):
             {"pred_return": [3.0], "real_return": [0.08]},
             index=self._index("2024-03-31 23:00:00"),
         )
-        test_cls = pd.DataFrame(
-            {"pred_prob": [0.7], "real_return": [0.08]},
+        test_72h = pd.DataFrame(
+            {"pred_return": [4.0], "real_return": [0.09]},
             index=self._index("2024-03-31 23:00:00"),
         )
 
@@ -366,7 +374,7 @@ class FusedSignalWorkflowTests(unittest.TestCase):
                 ),
                 patch(
                     "nusri_project.training.fused_signal_workflow._build_component_predictions_for_month",
-                    side_effect=[(train_frame, test_reg), (train_frame.rename(columns={"pred_return": "pred_prob"}), test_cls)],
+                    side_effect=[(train_frame, test_reg), (train_frame, test_72h)],
                 ) as build_predictions,
             ):
                 run_fused_signal_workflow(
@@ -408,8 +416,8 @@ class FusedSignalWorkflowTests(unittest.TestCase):
             {"pred_return": [3.0], "real_return": [0.08]},
             index=self._index("2024-01-31 23:00:00"),
         )
-        train_cls = pd.DataFrame(
-            {"pred_prob": [0.2, 0.4, 0.6, 0.8], "real_return": [0.01, 0.02, 0.03, 0.04]},
+        train_72h = pd.DataFrame(
+            {"pred_return": [1.0, 2.0, 3.0, 4.0], "real_return": [0.01, 0.02, 0.03, 0.04]},
             index=self._index(
                 "2023-09-30 23:00:00",
                 "2023-10-31 23:00:00",
@@ -417,8 +425,8 @@ class FusedSignalWorkflowTests(unittest.TestCase):
                 "2023-12-31 23:00:00",
             ),
         )
-        test_cls = pd.DataFrame(
-            {"pred_prob": [0.7], "real_return": [0.08]},
+        test_72h = pd.DataFrame(
+            {"pred_return": [4.0], "real_return": [0.09]},
             index=self._index("2024-01-31 23:00:00"),
         )
 
@@ -436,7 +444,7 @@ class FusedSignalWorkflowTests(unittest.TestCase):
                 ),
                 patch(
                     "nusri_project.training.fused_signal_workflow._build_component_predictions_for_month",
-                    side_effect=[(train_reg, test_reg), (train_cls, test_cls)],
+                    side_effect=[(train_reg, test_reg), (train_72h, test_72h)],
                 ),
             ):
                 with self.assertRaises(ValueError):

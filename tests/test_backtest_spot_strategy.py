@@ -211,6 +211,56 @@ class SpotBacktestTests(unittest.TestCase):
         self.assertEqual(captured["config"].max_position, 0.15)
         self.assertAlmostEqual(float(captured["signal"].iloc[0, 0]), 0.60)
 
+    def test_main_with_repo_config_uses_pred_score_signal_column_for_costaware_fused_main(self) -> None:
+        repo_config_path = Path(__file__).resolve().parents[1] / "config.toml"
+
+        with TemporaryDirectory() as tmp:
+            pred_path = Path(tmp) / "pred_score.pkl"
+            pd.DataFrame(
+                {"pred_score": [0.72]},
+                index=pd.to_datetime(["2024-01-01 00:00:00"]),
+            ).to_pickle(pred_path)
+
+            output_dir = Path(tmp) / "output"
+            captured: dict[str, object] = {}
+            report = pd.DataFrame(
+                {
+                    "return": [0.01],
+                    "cost": [0.001],
+                    "turnover": [0.0],
+                    "value": [15_000.0],
+                    "account": [100_000.0],
+                },
+                index=pd.to_datetime(["2024-01-01 01:00:00"]),
+            )
+
+            def fake_run_qlib_backtest(signal, config):
+                captured["signal"] = signal.copy()
+                captured["config"] = config
+                return report, {"BTCUSDT": 0.15}, None
+
+            with patch("nusri_project.strategy.backtest_spot_strategy.run_qlib_backtest", side_effect=fake_run_qlib_backtest):
+                with patch(
+                    "sys.argv",
+                    [
+                        "backtest_spot_strategy",
+                        "--pred-glob",
+                        str(pred_path),
+                        "--config",
+                        str(repo_config_path),
+                        "--experiment-profile",
+                        "costaware_fused_main",
+                        "--output-dir",
+                        str(output_dir),
+                    ],
+                ):
+                    exit_code = main()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(captured["config"].signal_kind, "score")
+        self.assertEqual(captured["config"].max_position, 0.15)
+        self.assertAlmostEqual(float(captured["signal"].iloc[0, 0]), 0.72)
+
     def test_prepare_signal_frame_builds_instrument_datetime_multiindex(self) -> None:
         frame = pd.DataFrame(
             {
