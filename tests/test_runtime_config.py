@@ -304,6 +304,38 @@ class RuntimeConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_fused_runtime_config(bad_path, experiment_name="regression_fused_main")
 
+    def test_load_fused_runtime_config_rejects_empty_components(self) -> None:
+        config_path = self._write_config(
+            CONFIG_TEXT.replace('components = ["reg_24h", "reg_72h"]', 'components = []')
+        )
+
+        with self.assertRaises(ValueError):
+            load_fused_runtime_config(config_path, experiment_name="regression_fused_main")
+
+    def test_load_fused_runtime_config_rejects_invalid_component_transform(self) -> None:
+        config_path = self._write_config(
+            CONFIG_TEXT.replace('component_transform = "robust_norm_clip"', 'component_transform = "bad_transform"')
+        )
+
+        with self.assertRaises(ValueError):
+            load_fused_runtime_config(config_path, experiment_name="regression_fused_main")
+
+    def test_load_fused_runtime_config_rejects_invalid_transform_fit_scope(self) -> None:
+        config_path = self._write_config(
+            CONFIG_TEXT.replace('transform_fit_scope = "train_only"', 'transform_fit_scope = "bad_scope"')
+        )
+
+        with self.assertRaises(ValueError):
+            load_fused_runtime_config(config_path, experiment_name="regression_fused_main")
+
+    def test_load_fused_runtime_config_rejects_empty_output_column(self) -> None:
+        config_path = self._write_config(
+            CONFIG_TEXT.replace('output_column = "pred_score"', 'output_column = ""')
+        )
+
+        with self.assertRaises(ValueError):
+            load_fused_runtime_config(config_path, experiment_name="regression_fused_main")
+
     def test_load_fused_runtime_config_falls_back_to_defaults_factor_profile(self) -> None:
         config_path = self._write_config(
             CONFIG_TEXT.replace('factor_profile = "top23"\nfusion_profile = "regression_fused_main"\n', 'fusion_profile = "regression_fused_main"\n')

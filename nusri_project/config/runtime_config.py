@@ -212,8 +212,16 @@ def _build_fusion_profile_config(name: str, raw: dict) -> FusionProfileConfig:
         output_column=str(raw.get("output_column", "pred_score")),
         cache_component_predictions=bool(raw.get("cache_component_predictions", False)),
     )
+    if not fusion.components:
+        raise ValueError("fusion profile requires at least one component")
     if len(fusion.weights) != len(fusion.components):
         raise ValueError("fusion profile weights must match component count")
+    if fusion.component_transform not in {"robust_norm_clip"}:
+        raise ValueError(f"unsupported component_transform: {fusion.component_transform}")
+    if fusion.transform_fit_scope not in {"train_only"}:
+        raise ValueError(f"unsupported transform_fit_scope: {fusion.transform_fit_scope}")
+    if not fusion.output_column:
+        raise ValueError("fusion profile output_column must not be empty")
     return fusion
 
 
