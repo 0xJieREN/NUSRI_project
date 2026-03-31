@@ -78,6 +78,19 @@ cooldown_hours = 12
 drawdown_de_risk_threshold = 0.02
 de_risk_position = 0.0
 
+[trading.score_weighted]
+signal_kind = "score"
+open_score = 0.40
+close_score = 0.20
+size_floor_score = 0.40
+size_full_score = 0.80
+curve_gamma = 1.5
+max_position = 0.20
+min_holding_hours = 24
+cooldown_hours = 6
+drawdown_de_risk_threshold = 0.02
+de_risk_position = 0.0
+
 [experiments.cost_aware_main]
 data_profile = "btc_1h_full"
 factor_profile = "top23"
@@ -93,6 +106,14 @@ label_profile = "regression_72h"
 model_profile = "lgbm_regression_default"
 training_profile = "rolling_2y_monthly"
 trade_profile = "return_conservative"
+
+[experiments.score_main]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "regression_72h"
+model_profile = "lgbm_regression_default"
+training_profile = "rolling_2y_monthly"
+trade_profile = "score_weighted"
 """
 
 
@@ -182,6 +203,24 @@ class AnalysisEntrypointsConfigTests(unittest.TestCase):
         self.assertEqual(config.enter_prob_threshold, 0.65)
         self.assertEqual(config.full_prob_threshold, 0.80)
         self.assertEqual(config.max_position, 0.15)
+
+    def test_build_spot_strategy_config_from_runtime_uses_score_trade_profile(self) -> None:
+        config_path = self._write_config()
+        runtime = load_runtime_config(config_path, experiment_name="score_main")
+
+        config = build_spot_strategy_config_from_runtime(
+            runtime,
+            start_time="2025-01-01 00:00:00",
+            end_time="2025-12-31 23:00:00",
+        )
+
+        self.assertEqual(config.signal_kind, "score")
+        self.assertEqual(config.open_score, 0.40)
+        self.assertEqual(config.close_score, 0.20)
+        self.assertEqual(config.size_floor_score, 0.40)
+        self.assertEqual(config.size_full_score, 0.80)
+        self.assertEqual(config.curve_gamma, 1.5)
+        self.assertEqual(config.max_position, 0.20)
 
     def test_phase2_default_output_dir_is_short(self) -> None:
         args = parse_phase2_args(["--mlruns-root", "mlruns"])

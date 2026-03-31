@@ -103,6 +103,19 @@ cooldown_hours = 12
 drawdown_de_risk_threshold = 0.02
 de_risk_position = 0.10
 
+[trading.score_weighted]
+signal_kind = "score"
+open_score = 0.40
+close_score = 0.20
+size_floor_score = 0.40
+size_full_score = 0.80
+curve_gamma = 1.5
+max_position = 0.25
+min_holding_hours = 48
+cooldown_hours = 12
+drawdown_de_risk_threshold = 0.02
+de_risk_position = 0.10
+
 [experiments.cost_aware_main]
 data_profile = "btc_1h_full"
 factor_profile = "top23"
@@ -118,6 +131,14 @@ label_profile = "regression_72h"
 model_profile = "lgbm_regression_default"
 training_profile = "single_full"
 trade_profile = "return_balanced"
+
+[experiments.score_main]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "regression_72h"
+model_profile = "lgbm_regression_default"
+training_profile = "single_full"
+trade_profile = "score_weighted"
 
 [experiments.regression_fused_main]
 data_profile = "btc_1h_full"
@@ -196,6 +217,19 @@ class RuntimeConfigTests(unittest.TestCase):
         self.assertAlmostEqual(runtime.trade.full_prob_threshold or 0.0, 0.80)
         self.assertAlmostEqual(runtime.trade.max_position, 0.15)
 
+    def test_score_trade_config_parses_score_thresholds(self) -> None:
+        config_path = self._write_config()
+
+        runtime = load_runtime_config(config_path, experiment_name="score_main")
+
+        self.assertEqual(runtime.trade.signal_kind, "score")
+        self.assertAlmostEqual(runtime.trade.open_score or 0.0, 0.40)
+        self.assertAlmostEqual(runtime.trade.close_score or 0.0, 0.20)
+        self.assertAlmostEqual(runtime.trade.size_floor_score or 0.0, 0.40)
+        self.assertAlmostEqual(runtime.trade.size_full_score or 0.0, 0.80)
+        self.assertAlmostEqual(runtime.trade.curve_gamma or 0.0, 1.5)
+        self.assertAlmostEqual(runtime.trade.max_position, 0.25)
+
     def test_invalid_probability_trade_threshold_order_raises_value_error(self) -> None:
         config_path = self._write_config(
             CONFIG_TEXT.replace("full_prob_threshold = 0.80", "full_prob_threshold = 0.60")
@@ -203,6 +237,14 @@ class RuntimeConfigTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             load_runtime_config(config_path)
+
+    def test_invalid_score_trade_threshold_order_raises_value_error(self) -> None:
+        config_path = self._write_config(
+            CONFIG_TEXT.replace("size_full_score = 0.80", "size_full_score = 0.30")
+        )
+
+        with self.assertRaises(ValueError):
+            load_runtime_config(config_path, experiment_name="score_main")
 
     def test_invalid_costaware_threshold_components_raise_value_error(self) -> None:
         config_path = self._write_config(

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import textwrap
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 from qlib.backtest.position import Position
@@ -12,6 +14,7 @@ from nusri_project.strategy.backtest_spot_strategy import (
     align_backtest_window,
     build_backtest_components,
     load_prediction_frames,
+    main,
     normalize_prediction_frame,
     prepare_signal_frame,
     summarize_report,
@@ -20,6 +23,60 @@ from nusri_project.strategy.probability_signal_strategy import compute_target_we
 from nusri_project.strategy.qlib_spot_strategy import QlibSingleAssetOrderGen
 from nusri_project.strategy.return_signal_strategy import compute_target_weight_from_return_signal
 from nusri_project.strategy.strategy_config import SpotStrategyConfig
+
+
+CONFIG_TEXT = """
+[defaults]
+experiment_profile = "score_main"
+
+[data.btc_1h_full]
+start_time = "2024-01-01 00:00:00"
+end_time = "2024-01-31 23:00:00"
+freq = "60min"
+provider_uri = "./qlib_data/my_crypto_data"
+instrument = "BTCUSDT"
+fields = ["ohlcv"]
+deal_price = "close"
+initial_cash = 100000.0
+fee_rate = 0.001
+min_cost = 0.0
+
+[factors.top23]
+feature_set = "top23"
+
+[labels.regression_72h]
+kind = "regression"
+horizon_hours = 72
+
+[models.lgbm_regression_default]
+model_type = "lightgbm"
+objective = "mse"
+
+[training.single_full]
+run_mode = "single"
+training_window = "all"
+
+[trading.score_weighted]
+signal_kind = "score"
+open_score = 0.40
+close_score = 0.20
+size_floor_score = 0.40
+size_full_score = 0.80
+curve_gamma = 2.0
+max_position = 0.25
+min_holding_hours = 24
+cooldown_hours = 12
+drawdown_de_risk_threshold = 0.02
+de_risk_position = 0.0
+
+[experiments.score_main]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "regression_72h"
+model_profile = "lgbm_regression_default"
+training_profile = "single_full"
+trade_profile = "score_weighted"
+"""
 
 
 class SpotBacktestTests(unittest.TestCase):
@@ -296,6 +353,57 @@ class SpotBacktestTests(unittest.TestCase):
         self.assertEqual(strategy_config["module_path"], "nusri_project.strategy.score_signal_strategy")
         self.assertEqual(strategy_config["kwargs"]["open_score"], 0.4)
         self.assertEqual(strategy_config["kwargs"]["curve_gamma"], 1.5)
+
+    def test_main_with_config_uses_pred_score_signal_column_for_score_strategy(self) -> None:
+        with TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.toml"
+            config_path.write_text(textwrap.dedent(CONFIG_TEXT).strip() + "\n")
+
+            pred_path = Path(tmp) / "pred_score.pkl"
+            pd.DataFrame(
+                {"pred_score": [0.60]},
+                index=pd.to_datetime(["2024-01-01 00:00:00"]),
+            ).to_pickle(pred_path)
+
+            output_dir = Path(tmp) / "output"
+            report = pd.DataFrame(
+                {
+                    "return": [0.01],
+                    "cost": [0.001],
+                    "turnover": [0.0],
+                    "value": [25_000.0],
+                    "account": [100_000.0],
+                },
+                index=pd.to_datetime(["2024-01-01 01:00:00"]),
+            )
+            captured: dict[str, object] = {}
+
+            def fake_run_qlib_backtest(signal, config):
+                captured["signal"] = signal.copy()
+                captured["config"] = config
+                return report, {"BTCUSDT": 0.25}, None
+
+            with patch("nusri_project.strategy.backtest_spot_strategy.run_qlib_backtest", side_effect=fake_run_qlib_backtest):
+                with patch(
+                    "sys.argv",
+                    [
+                        "backtest_spot_strategy",
+                        "--pred-glob",
+                        str(pred_path),
+                        "--config",
+                        str(config_path),
+                        "--experiment-profile",
+                        "score_main",
+                        "--output-dir",
+                        str(output_dir),
+                    ],
+                ):
+                    exit_code = main()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(captured["config"].signal_kind, "score")
+        self.assertEqual(captured["config"].curve_gamma, 2.0)
+        self.assertAlmostEqual(float(captured["signal"].iloc[0, 0]), 0.60)
 
     def test_summarize_report_uses_net_returns_and_custom_scaler(self) -> None:
         report = pd.DataFrame(

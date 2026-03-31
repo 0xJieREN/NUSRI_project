@@ -82,6 +82,11 @@ class TradeConfig:
     enter_prob_threshold: float | None = None
     exit_prob_threshold: float | None = None
     full_prob_threshold: float | None = None
+    open_score: float | None = None
+    close_score: float | None = None
+    size_floor_score: float | None = None
+    size_full_score: float | None = None
+    curve_gamma: float | None = None
 
 
 @dataclass(frozen=True)

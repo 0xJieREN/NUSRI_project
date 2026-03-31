@@ -95,6 +95,21 @@ def _validate_trade_config(trade: TradeConfig) -> None:
                 raise ValueError("probability thresholds must be in [0, 1]")
         if not trade.full_prob_threshold >= trade.enter_prob_threshold >= trade.exit_prob_threshold:
             raise ValueError("probability thresholds must satisfy full_prob_threshold >= enter_prob_threshold >= exit_prob_threshold")
+    elif trade.signal_kind == "score":
+        if (
+            trade.open_score is None
+            or trade.close_score is None
+            or trade.size_floor_score is None
+            or trade.size_full_score is None
+            or trade.curve_gamma is None
+        ):
+            raise ValueError("score signal config requires open/close/size_floor/size_full scores and curve_gamma")
+        if trade.open_score < trade.close_score:
+            raise ValueError("score thresholds must satisfy open_score >= close_score")
+        if trade.size_full_score <= trade.size_floor_score:
+            raise ValueError("score thresholds must satisfy size_full_score > size_floor_score")
+        if trade.curve_gamma <= 0:
+            raise ValueError("curve_gamma must be positive")
     else:
         raise ValueError(f"unsupported trade signal_kind: {trade.signal_kind}")
     if abs(trade.de_risk_position - trade.max_position) <= 1e-12:
@@ -239,6 +254,11 @@ def _build_trade_config(raw: dict) -> TradeConfig:
         enter_prob_threshold=float(raw["enter_prob_threshold"]) if "enter_prob_threshold" in raw else None,
         exit_prob_threshold=float(raw["exit_prob_threshold"]) if "exit_prob_threshold" in raw else None,
         full_prob_threshold=float(raw["full_prob_threshold"]) if "full_prob_threshold" in raw else None,
+        open_score=float(raw["open_score"]) if "open_score" in raw else None,
+        close_score=float(raw["close_score"]) if "close_score" in raw else None,
+        size_floor_score=float(raw["size_floor_score"]) if "size_floor_score" in raw else None,
+        size_full_score=float(raw["size_full_score"]) if "size_full_score" in raw else None,
+        curve_gamma=float(raw["curve_gamma"]) if "curve_gamma" in raw else None,
     )
     _validate_trade_config(trade)
     return trade

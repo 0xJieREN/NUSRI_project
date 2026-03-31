@@ -115,7 +115,7 @@ def build_spot_strategy_config_from_runtime(
         close_score=getattr(trade, "close_score", None),
         size_floor_score=getattr(trade, "size_floor_score", None),
         size_full_score=getattr(trade, "size_full_score", None),
-        curve_gamma=float(getattr(trade, "curve_gamma", 1.0)),
+        curve_gamma=float(trade.curve_gamma) if getattr(trade, "curve_gamma", None) is not None else 1.0,
         min_holding_hours=trade.min_holding_hours,
         cooldown_hours=trade.cooldown_hours,
         max_position=trade.max_position,

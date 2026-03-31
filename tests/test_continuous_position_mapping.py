@@ -27,6 +27,27 @@ class ContinuousPositionMappingTests(unittest.TestCase):
 
         self.assertAlmostEqual(target, 0.125)
 
+    def test_compute_target_weight_from_score_signal_applies_nonlinear_curve_gamma(self) -> None:
+        target = compute_target_weight_from_score_signal(
+            pred_score=0.60,
+            current_weight=0.0,
+            max_position=0.25,
+            open_score=0.40,
+            close_score=0.20,
+            size_floor_score=0.40,
+            size_full_score=0.80,
+            curve_gamma=2.0,
+            min_holding_bars=0,
+            holding_bars=0,
+            cooldown_bars=0,
+            bars_since_trade=99,
+            drawdown=0.0,
+            drawdown_de_risk_threshold=0.08,
+            de_risk_position=0.0,
+        )
+
+        self.assertAlmostEqual(target, 0.0625)
+
     def test_compute_target_weight_from_score_signal_closes_when_score_hits_close_threshold(self) -> None:
         target = compute_target_weight_from_score_signal(
             pred_score=0.20,
