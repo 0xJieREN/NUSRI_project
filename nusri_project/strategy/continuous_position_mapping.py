@@ -25,6 +25,8 @@ def compute_target_weight_from_score_signal(
         target_weight = 0.0
     elif current_weight > 0 and pred_score <= close_score:
         target_weight = 0.0
+    elif current_weight > 0 and pred_score <= size_floor_score:
+        target_weight = current_weight
     else:
         normalized_score = (pred_score - size_floor_score) / (size_full_score - size_floor_score)
         normalized_score = min(max(normalized_score, 0.0), 1.0)

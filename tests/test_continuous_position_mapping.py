@@ -69,6 +69,48 @@ class ContinuousPositionMappingTests(unittest.TestCase):
 
         self.assertEqual(target, 0.0)
 
+    def test_compute_target_weight_from_score_signal_preserves_held_weight_between_close_and_sizing_floor(self) -> None:
+        target = compute_target_weight_from_score_signal(
+            pred_score=0.30,
+            current_weight=0.125,
+            max_position=0.25,
+            open_score=0.60,
+            close_score=0.20,
+            size_floor_score=0.40,
+            size_full_score=0.80,
+            curve_gamma=1.0,
+            min_holding_bars=0,
+            holding_bars=0,
+            cooldown_bars=0,
+            bars_since_trade=99,
+            drawdown=0.0,
+            drawdown_de_risk_threshold=0.08,
+            de_risk_position=0.0,
+        )
+
+        self.assertEqual(target, 0.125)
+
+    def test_compute_target_weight_from_score_signal_is_flat_at_open_equals_sizing_floor_boundary(self) -> None:
+        target = compute_target_weight_from_score_signal(
+            pred_score=0.40,
+            current_weight=0.0,
+            max_position=0.25,
+            open_score=0.40,
+            close_score=0.20,
+            size_floor_score=0.40,
+            size_full_score=0.80,
+            curve_gamma=1.0,
+            min_holding_bars=0,
+            holding_bars=0,
+            cooldown_bars=0,
+            bars_since_trade=99,
+            drawdown=0.0,
+            drawdown_de_risk_threshold=0.08,
+            de_risk_position=0.0,
+        )
+
+        self.assertEqual(target, 0.0)
+
     def test_compute_target_weight_from_score_signal_closes_when_score_hits_close_threshold(self) -> None:
         target = compute_target_weight_from_score_signal(
             pred_score=0.20,
