@@ -48,6 +48,13 @@ horizon_hours = 8
 kind = "regression"
 horizon_hours = 24
 
+[labels.classification_24h_costaware]
+kind = "classification_costaware"
+horizon_hours = 24
+round_trip_cost = 0.002
+safety_margin = 0.004
+positive_threshold = 0.006
+
 [labels.regression_48h]
 kind = "regression"
 horizon_hours = 48
@@ -137,6 +144,19 @@ cooldown_hours = 12
 drawdown_de_risk_threshold = 0.02
 de_risk_position = 0.0
 
+[trading.score_conservative]
+signal_kind = "score"
+open_score = 0.40
+close_score = 0.20
+size_floor_score = 0.40
+size_full_score = 0.80
+curve_gamma = 1.5
+max_position = 0.15
+min_holding_hours = 48
+cooldown_hours = 12
+drawdown_de_risk_threshold = 0.02
+de_risk_position = 0.0
+
 [experiments.cost_aware_main]
 data_profile = "btc_1h_full"
 factor_profile = "top23"
@@ -156,7 +176,20 @@ trade_profile = "return_conservative"
 [experiments.regression_fused_main]
 data_profile = "btc_1h_full"
 factor_profile = "top23"
+label_profile = "regression_72h"
+model_profile = "lgbm_regression_default"
+training_profile = "rolling_24m_halflife_6m"
+trade_profile = "score_conservative"
 fusion_profile = "regression_fused_main"
+
+[experiments.costaware_fused_main]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_24m_halflife_6m"
+trade_profile = "score_conservative"
+fusion_profile = "costaware_fused_main"
 
 [signal_components.reg_24h]
 label_profile = "regression_24h"
@@ -169,8 +202,27 @@ label_profile = "regression_72h"
 model_profile = "lgbm_regression_default"
 training_profile = "rolling_24m_halflife_6m"
 
+[signal_components.cls_24h_costaware]
+label_profile = "classification_24h_costaware"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_24m_uniform"
+
+[signal_components.cls_72h_costaware]
+factor_profile = "top23"
+label_profile = "classification_72h_costaware"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_24m_halflife_6m"
+
 [fusion_profiles.regression_fused_main]
 components = ["reg_24h", "reg_72h"]
+weights = [0.4, 0.6]
+component_transform = "robust_norm_clip"
+transform_fit_scope = "train_only"
+output_column = "pred_score"
+cache_component_predictions = false
+
+[fusion_profiles.costaware_fused_main]
+components = ["cls_24h_costaware", "cls_72h_costaware"]
 weights = [0.4, 0.6]
 component_transform = "robust_norm_clip"
 transform_fit_scope = "train_only"

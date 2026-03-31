@@ -27,7 +27,7 @@ from nusri_project.strategy.strategy_config import SpotStrategyConfig
 
 CONFIG_TEXT = """
 [defaults]
-experiment_profile = "score_main"
+experiment_profile = "regression_fused_main"
 
 [data.btc_1h_full]
 start_time = "2024-01-01 00:00:00"
@@ -48,38 +48,169 @@ feature_set = "top23"
 kind = "regression"
 horizon_hours = 72
 
+[labels.regression_24h]
+kind = "regression"
+horizon_hours = 24
+
+[labels.classification_24h_costaware]
+kind = "classification_costaware"
+horizon_hours = 24
+round_trip_cost = 0.002
+safety_margin = 0.004
+positive_threshold = 0.006
+
+[labels.classification_72h_costaware]
+kind = "classification_costaware"
+horizon_hours = 72
+round_trip_cost = 0.002
+safety_margin = 0.004
+positive_threshold = 0.006
+
 [models.lgbm_regression_default]
 model_type = "lightgbm"
 objective = "mse"
+
+[models.lgbm_binary_default]
+model_type = "lightgbm"
+objective = "binary"
 
 [training.single_full]
 run_mode = "single"
 training_window = "all"
 
-[trading.score_weighted]
+[training.rolling_24m_uniform]
+run_mode = "rolling"
+training_window_months = 24
+rolling_step_months = 1
+sample_weight_mode = "uniform"
+
+[training.rolling_24m_halflife_6m]
+run_mode = "rolling"
+training_window_months = 24
+rolling_step_months = 1
+sample_weight_mode = "exp_halflife"
+half_life_months = 6
+
+[trading.score_conservative]
 signal_kind = "score"
 open_score = 0.40
 close_score = 0.20
 size_floor_score = 0.40
 size_full_score = 0.80
-curve_gamma = 2.0
-max_position = 0.25
-min_holding_hours = 24
+curve_gamma = 1.5
+max_position = 0.15
+min_holding_hours = 48
 cooldown_hours = 12
 drawdown_de_risk_threshold = 0.02
 de_risk_position = 0.0
 
-[experiments.score_main]
+[experiments.regression_fused_main]
 data_profile = "btc_1h_full"
 factor_profile = "top23"
 label_profile = "regression_72h"
 model_profile = "lgbm_regression_default"
-training_profile = "single_full"
-trade_profile = "score_weighted"
+training_profile = "rolling_24m_halflife_6m"
+trade_profile = "score_conservative"
+fusion_profile = "regression_fused_main"
+
+[experiments.costaware_fused_main]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_24m_halflife_6m"
+trade_profile = "score_conservative"
+fusion_profile = "costaware_fused_main"
+
+[signal_components.reg_24h]
+label_profile = "regression_24h"
+model_profile = "lgbm_regression_default"
+training_profile = "rolling_24m_uniform"
+
+[signal_components.reg_72h]
+label_profile = "regression_72h"
+model_profile = "lgbm_regression_default"
+training_profile = "rolling_24m_halflife_6m"
+
+[signal_components.cls_24h_costaware]
+label_profile = "classification_24h_costaware"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_24m_uniform"
+
+[signal_components.cls_72h_costaware]
+label_profile = "classification_72h_costaware"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_24m_halflife_6m"
+
+[fusion_profiles.regression_fused_main]
+components = ["reg_24h", "reg_72h"]
+weights = [0.4, 0.6]
+component_transform = "robust_norm_clip"
+transform_fit_scope = "train_only"
+output_column = "pred_score"
+cache_component_predictions = false
+
+[fusion_profiles.costaware_fused_main]
+components = ["cls_24h_costaware", "cls_72h_costaware"]
+weights = [0.4, 0.6]
+component_transform = "robust_norm_clip"
+transform_fit_scope = "train_only"
+output_column = "pred_score"
+cache_component_predictions = false
 """
 
 
 class SpotBacktestTests(unittest.TestCase):
+    def test_main_with_repo_config_uses_pred_score_signal_column_for_regression_fused_main(self) -> None:
+        repo_config_path = Path(__file__).resolve().parents[1] / "config.toml"
+
+        with TemporaryDirectory() as tmp:
+            pred_path = Path(tmp) / "pred_score.pkl"
+            pd.DataFrame(
+                {"pred_score": [0.60]},
+                index=pd.to_datetime(["2024-01-01 00:00:00"]),
+            ).to_pickle(pred_path)
+
+            output_dir = Path(tmp) / "output"
+            captured: dict[str, object] = {}
+            report = pd.DataFrame(
+                {
+                    "return": [0.01],
+                    "cost": [0.001],
+                    "turnover": [0.0],
+                    "value": [15_000.0],
+                    "account": [100_000.0],
+                },
+                index=pd.to_datetime(["2024-01-01 01:00:00"]),
+            )
+
+            def fake_run_qlib_backtest(signal, config):
+                captured["signal"] = signal.copy()
+                captured["config"] = config
+                return report, {"BTCUSDT": 0.15}, None
+
+            with patch("nusri_project.strategy.backtest_spot_strategy.run_qlib_backtest", side_effect=fake_run_qlib_backtest):
+                with patch(
+                    "sys.argv",
+                    [
+                        "backtest_spot_strategy",
+                        "--pred-glob",
+                        str(pred_path),
+                        "--config",
+                        str(repo_config_path),
+                        "--experiment-profile",
+                        "regression_fused_main",
+                        "--output-dir",
+                        str(output_dir),
+                    ],
+                ):
+                    exit_code = main()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(captured["config"].signal_kind, "score")
+        self.assertEqual(captured["config"].max_position, 0.15)
+        self.assertAlmostEqual(float(captured["signal"].iloc[0, 0]), 0.60)
+
     def test_prepare_signal_frame_builds_instrument_datetime_multiindex(self) -> None:
         frame = pd.DataFrame(
             {
@@ -354,7 +485,7 @@ class SpotBacktestTests(unittest.TestCase):
         self.assertEqual(strategy_config["kwargs"]["open_score"], 0.4)
         self.assertEqual(strategy_config["kwargs"]["curve_gamma"], 1.5)
 
-    def test_main_with_config_uses_pred_score_signal_column_for_score_strategy(self) -> None:
+    def test_main_with_config_uses_pred_score_signal_column_for_regression_fused_main(self) -> None:
         with TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "config.toml"
             config_path.write_text(textwrap.dedent(CONFIG_TEXT).strip() + "\n")
@@ -393,7 +524,7 @@ class SpotBacktestTests(unittest.TestCase):
                         "--config",
                         str(config_path),
                         "--experiment-profile",
-                        "score_main",
+                        "regression_fused_main",
                         "--output-dir",
                         str(output_dir),
                     ],
@@ -402,7 +533,8 @@ class SpotBacktestTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(captured["config"].signal_kind, "score")
-        self.assertEqual(captured["config"].curve_gamma, 2.0)
+        self.assertEqual(captured["config"].curve_gamma, 1.5)
+        self.assertEqual(captured["config"].max_position, 0.15)
         self.assertAlmostEqual(float(captured["signal"].iloc[0, 0]), 0.60)
 
     def test_summarize_report_uses_net_returns_and_custom_scaler(self) -> None:

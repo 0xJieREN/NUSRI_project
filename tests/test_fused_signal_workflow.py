@@ -90,6 +90,70 @@ class FusedSignalWorkflowTests(unittest.TestCase):
             ),
         )
 
+    def _costaware_runtime(self, *, cache_component_predictions: bool = True) -> FusedExperimentRuntimeConfig:
+        return FusedExperimentRuntimeConfig(
+            experiment_name="costaware_fused_main",
+            data=DataConfig(
+                start_time="2019-09-10 08:00:00",
+                end_time="2025-12-31 23:00:00",
+                freq="60min",
+                provider_uri="./qlib_data/my_crypto_data",
+                instrument="BTCUSDT",
+                fields=("ohlcv",),
+                deal_price="close",
+                initial_cash=100000.0,
+                fee_rate=0.001,
+                min_cost=0.0,
+            ),
+            fusion=FusionProfileConfig(
+                name="costaware_fused_main",
+                components=("cls_24h_costaware", "cls_72h_costaware"),
+                weights=(0.4, 0.6),
+                component_transform="robust_norm_clip",
+                transform_fit_scope="train_only",
+                output_column="pred_score",
+                cache_component_predictions=cache_component_predictions,
+            ),
+            components=(
+                SignalComponentRuntimeConfig(
+                    name="cls_24h_costaware",
+                    factor=FactorConfig(feature_set="top23"),
+                    label=LabelConfig(
+                        kind="classification_costaware",
+                        horizon_hours=24,
+                        round_trip_cost=0.002,
+                        safety_margin=0.004,
+                        positive_threshold=0.006,
+                    ),
+                    model=ModelConfig(model_type="lightgbm", objective="binary"),
+                    training=TrainingConfig(
+                        run_mode="rolling",
+                        training_window_months=24,
+                        rolling_step_months=1,
+                    ),
+                ),
+                SignalComponentRuntimeConfig(
+                    name="cls_72h_costaware",
+                    factor=FactorConfig(feature_set="top23"),
+                    label=LabelConfig(
+                        kind="classification_costaware",
+                        horizon_hours=72,
+                        round_trip_cost=0.002,
+                        safety_margin=0.004,
+                        positive_threshold=0.006,
+                    ),
+                    model=ModelConfig(model_type="lightgbm", objective="binary"),
+                    training=TrainingConfig(
+                        run_mode="rolling",
+                        training_window_months=24,
+                        rolling_step_months=1,
+                        sample_weight_mode="exp_halflife",
+                        half_life_months=6,
+                    ),
+                ),
+            ),
+        )
+
     def test_fuse_component_predictions_emits_pred_score_and_real_return(self) -> None:
         index = self._index("2025-01-31 23:00:00", "2025-02-28 23:00:00")
         component_frames = {
@@ -382,6 +446,82 @@ class FusedSignalWorkflowTests(unittest.TestCase):
                         prediction_output_dir=output_dir,
                     )
                 self.assertEqual(list(output_dir.glob("*.pkl")), [])
+
+    def test_run_fused_signal_workflow_supports_costaware_public_mainline(self) -> None:
+        train_24h = pd.DataFrame(
+            {"pred_prob": [0.2, 0.4, 0.6, 0.8], "real_return": [0.01, 0.02, 0.03, 0.04]},
+            index=self._index(
+                "2023-09-30 23:00:00",
+                "2023-10-31 23:00:00",
+                "2023-11-30 23:00:00",
+                "2023-12-31 23:00:00",
+            ),
+        )
+        test_24h = pd.DataFrame(
+            {"pred_prob": [0.7, 0.9], "real_return": [0.08, 0.12]},
+            index=self._index("2024-01-31 23:00:00", "2024-02-29 23:00:00"),
+        )
+        train_72h = pd.DataFrame(
+            {"pred_prob": [0.3, 0.5, 0.7, 0.9], "real_return": [0.01, 0.02, 0.03, 0.04]},
+            index=self._index(
+                "2023-09-30 23:00:00",
+                "2023-10-31 23:00:00",
+                "2023-11-30 23:00:00",
+                "2023-12-31 23:00:00",
+            ),
+        )
+        test_72h = pd.DataFrame(
+            {"pred_prob": [0.8, 0.95], "real_return": [0.08, 0.12]},
+            index=self._index("2024-01-31 23:00:00", "2024-02-29 23:00:00"),
+        )
+        expected_24h = apply_component_transform(
+            test_24h["pred_prob"],
+            transform="robust_norm_clip",
+            params={"median": 0.5, "scale": 0.29652, "clip_value": 3.0},
+            clip_value=3.0,
+        )
+        expected_72h = apply_component_transform(
+            test_72h["pred_prob"],
+            transform="robust_norm_clip",
+            params={"median": 0.6, "scale": 0.29652, "clip_value": 3.0},
+            clip_value=3.0,
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            with (
+                patch(
+                    "nusri_project.training.fused_signal_workflow.load_fused_runtime_config",
+                    return_value=self._costaware_runtime(cache_component_predictions=False),
+                ),
+                patch("nusri_project.training.fused_signal_workflow.init_qlib"),
+                patch(
+                    "nusri_project.training.fused_signal_workflow.pd.date_range",
+                    return_value=[pd.Timestamp("2024-01-01 00:00:00")],
+                ),
+                patch(
+                    "nusri_project.training.fused_signal_workflow._build_component_predictions_for_month",
+                    side_effect=[(train_24h, test_24h), (train_72h, test_72h)],
+                ),
+            ):
+                yearly_results = run_fused_signal_workflow(
+                    "config.toml",
+                    experiment_name="costaware_fused_main",
+                    prediction_output_dir=output_dir,
+                )
+
+        fused = yearly_results["2024"][0]
+        self.assertEqual(list(fused.columns), ["pred_score", "real_return"])
+        pd.testing.assert_series_equal(
+            fused["pred_score"],
+            (expected_24h * 0.4 + expected_72h * 0.6).rename("pred_score"),
+            check_names=True,
+        )
+        pd.testing.assert_series_equal(
+            fused["real_return"],
+            test_72h["real_return"],
+            check_names=True,
+        )
 
 
 if __name__ == "__main__":

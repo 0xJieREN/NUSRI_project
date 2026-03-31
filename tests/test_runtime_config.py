@@ -44,6 +44,13 @@ horizon_hours = 72
 kind = "regression"
 horizon_hours = 24
 
+[labels.classification_24h_costaware]
+kind = "classification_costaware"
+horizon_hours = 24
+round_trip_cost = 0.002
+safety_margin = 0.004
+positive_threshold = 0.006
+
 [labels.classification_72h_costaware]
 kind = "classification_costaware"
 horizon_hours = 72
@@ -116,6 +123,19 @@ cooldown_hours = 12
 drawdown_de_risk_threshold = 0.02
 de_risk_position = 0.10
 
+[trading.score_conservative]
+signal_kind = "score"
+open_score = 0.40
+close_score = 0.20
+size_floor_score = 0.40
+size_full_score = 0.80
+curve_gamma = 1.5
+max_position = 0.15
+min_holding_hours = 48
+cooldown_hours = 12
+drawdown_de_risk_threshold = 0.02
+de_risk_position = 0.0
+
 [experiments.cost_aware_main]
 data_profile = "btc_1h_full"
 factor_profile = "top23"
@@ -143,7 +163,20 @@ trade_profile = "score_weighted"
 [experiments.regression_fused_main]
 data_profile = "btc_1h_full"
 factor_profile = "top23"
+label_profile = "regression_72h"
+model_profile = "lgbm_regression_default"
+training_profile = "rolling_24m_halflife_6m"
+trade_profile = "score_conservative"
 fusion_profile = "regression_fused_main"
+
+[experiments.costaware_fused_main]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "classification_72h_costaware"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_24m_halflife_6m"
+trade_profile = "score_conservative"
+fusion_profile = "costaware_fused_main"
 
 [signal_components.reg_24h]
 label_profile = "regression_24h"
@@ -156,6 +189,16 @@ label_profile = "regression_72h"
 model_profile = "lgbm_regression_default"
 training_profile = "rolling_24m_halflife_6m"
 
+[signal_components.cls_24h_costaware]
+label_profile = "classification_24h_costaware"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_24m_uniform"
+
+[signal_components.cls_72h_costaware]
+label_profile = "classification_72h_costaware"
+model_profile = "lgbm_binary_default"
+training_profile = "rolling_24m_halflife_6m"
+
 [fusion_profiles.regression_fused_main]
 components = ["reg_24h", "reg_72h"]
 weights = [0.4, 0.6]
@@ -163,7 +206,17 @@ component_transform = "robust_norm_clip"
 transform_fit_scope = "train_only"
 output_column = "pred_score"
 cache_component_predictions = false
+
+[fusion_profiles.costaware_fused_main]
+components = ["cls_24h_costaware", "cls_72h_costaware"]
+weights = [0.4, 0.6]
+component_transform = "robust_norm_clip"
+transform_fit_scope = "train_only"
+output_column = "pred_score"
+cache_component_predictions = false
 """
+
+REPO_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.toml"
 
 
 class RuntimeConfigTests(unittest.TestCase):
@@ -356,6 +409,49 @@ class RuntimeConfigTests(unittest.TestCase):
         self.assertEqual(runtime.components[1].label.horizon_hours, 72)
         self.assertEqual(runtime.components[0].training.sample_weight_mode, "uniform")
         self.assertEqual(runtime.components[1].training.training_window_months, 24)
+
+    def test_regression_fused_main_resolves_only_two_regression_components(self) -> None:
+        config_path = self._write_config()
+
+        runtime = load_fused_runtime_config(config_path, experiment_name="regression_fused_main")
+
+        self.assertEqual(tuple(component.name for component in runtime.components), ("reg_24h", "reg_72h"))
+        self.assertEqual(runtime.fusion.output_column, "pred_score")
+
+    def test_costaware_fused_main_resolves_only_two_costaware_components(self) -> None:
+        config_path = self._write_config()
+
+        runtime = load_fused_runtime_config(config_path, experiment_name="costaware_fused_main")
+
+        self.assertEqual(
+            tuple(component.name for component in runtime.components),
+            ("cls_24h_costaware", "cls_72h_costaware"),
+        )
+
+    def test_load_runtime_config_can_select_regression_fused_main_score_trade_profile(self) -> None:
+        config_path = self._write_config()
+
+        runtime = load_runtime_config(config_path, experiment_name="regression_fused_main")
+
+        self.assertEqual(runtime.trade.signal_kind, "score")
+        self.assertAlmostEqual(runtime.trade.open_score or 0.0, 0.40)
+        self.assertAlmostEqual(runtime.trade.size_full_score or 0.0, 0.80)
+        self.assertAlmostEqual(runtime.trade.max_position, 0.15)
+
+    def test_repo_config_regression_fused_main_exposes_score_trade_profile(self) -> None:
+        runtime = load_runtime_config(REPO_CONFIG_PATH, experiment_name="regression_fused_main")
+
+        self.assertEqual(runtime.trade.signal_kind, "score")
+        self.assertAlmostEqual(runtime.trade.max_position, 0.15)
+
+    def test_repo_config_costaware_fused_main_resolves_only_two_costaware_components(self) -> None:
+        runtime = load_fused_runtime_config(REPO_CONFIG_PATH, experiment_name="costaware_fused_main")
+
+        self.assertEqual(
+            tuple(component.name for component in runtime.components),
+            ("cls_24h_costaware", "cls_72h_costaware"),
+        )
+        self.assertEqual(runtime.fusion.output_column, "pred_score")
 
     def test_load_fused_runtime_config_rejects_weight_count_mismatch(self) -> None:
         bad_path = self._write_config(
