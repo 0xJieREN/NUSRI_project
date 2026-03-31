@@ -106,6 +106,10 @@ def _validate_trade_config(trade: TradeConfig) -> None:
             raise ValueError("score signal config requires open/close/size_floor/size_full scores and curve_gamma")
         if trade.open_score < trade.close_score:
             raise ValueError("score thresholds must satisfy open_score >= close_score")
+        if trade.open_score < trade.size_floor_score:
+            raise ValueError("score thresholds must satisfy open_score >= size_floor_score")
+        if trade.close_score > trade.size_floor_score:
+            raise ValueError("score thresholds must satisfy close_score <= size_floor_score")
         if trade.size_full_score <= trade.size_floor_score:
             raise ValueError("score thresholds must satisfy size_full_score > size_floor_score")
         if trade.curve_gamma <= 0:

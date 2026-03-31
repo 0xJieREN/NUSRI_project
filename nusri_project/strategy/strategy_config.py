@@ -69,6 +69,10 @@ class SpotStrategyConfig:
                 raise ValueError("score signal config requires open_score, close_score, size_floor_score, and size_full_score")
             if self.open_score < self.close_score:
                 raise ValueError("score thresholds must satisfy open_score >= close_score")
+            if self.open_score < self.size_floor_score:
+                raise ValueError("score thresholds must satisfy open_score >= size_floor_score")
+            if self.close_score > self.size_floor_score:
+                raise ValueError("score thresholds must satisfy close_score <= size_floor_score")
             if self.size_full_score <= self.size_floor_score:
                 raise ValueError("score thresholds must satisfy size_full_score > size_floor_score")
             if self.curve_gamma <= 0:

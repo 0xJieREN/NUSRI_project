@@ -266,7 +266,11 @@ def run_strategy_config(
     *,
     output_dir: Path | None = None,
 ) -> dict:
-    signal_column = "pred_prob" if config.signal_kind == "probability" else "pred_return"
+    signal_column = {
+        "probability": "pred_prob",
+        "return": "pred_return",
+        "score": "pred_score",
+    }[config.signal_kind]
     combined = load_prediction_frames(prediction_files, signal_column=signal_column)
     signal = prepare_signal_frame(combined, instrument=config.instrument, signal_column=signal_column)
     report, positions, indicators = run_qlib_backtest(signal, config)

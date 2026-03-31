@@ -246,6 +246,25 @@ class RuntimeConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_runtime_config(config_path, experiment_name="score_main")
 
+    def test_invalid_score_trade_gate_below_sizing_floor_raises_value_error(self) -> None:
+        config_path = self._write_config(
+            CONFIG_TEXT.replace("open_score = 0.40", "open_score = 0.30")
+        )
+
+        with self.assertRaises(ValueError):
+            load_runtime_config(config_path, experiment_name="score_main")
+
+    def test_invalid_score_trade_close_above_sizing_floor_raises_value_error(self) -> None:
+        config_path = self._write_config(
+            CONFIG_TEXT.replace("close_score = 0.20", "close_score = 0.35").replace(
+                "size_floor_score = 0.40",
+                "size_floor_score = 0.30",
+            )
+        )
+
+        with self.assertRaises(ValueError):
+            load_runtime_config(config_path, experiment_name="score_main")
+
     def test_invalid_costaware_threshold_components_raise_value_error(self) -> None:
         config_path = self._write_config(
             CONFIG_TEXT.replace("positive_threshold = 0.006", "positive_threshold = 0.005")

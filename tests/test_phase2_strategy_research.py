@@ -4,20 +4,77 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import textwrap
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 
+from nusri_project.config.runtime_config import load_runtime_config
 from nusri_project.strategy.phase2_strategy_research import (
     build_scan_profile,
     build_parameter_grid,
     build_probability_parameter_grid,
     find_prediction_files,
     rank_scan_results,
+    run_strategy_config,
     select_top_feasible_candidates,
 )
+from nusri_project.strategy.strategy_config import build_spot_strategy_config_from_runtime
 
 
 class Phase2StrategyResearchTests(unittest.TestCase):
+    SCORE_CONFIG_TEXT = """
+    [defaults]
+    experiment_profile = "score_main"
+
+    [data.btc_1h_full]
+    start_time = "2024-01-01 00:00:00"
+    end_time = "2024-01-31 23:00:00"
+    freq = "60min"
+    provider_uri = "./qlib_data/my_crypto_data"
+    instrument = "BTCUSDT"
+    fields = ["ohlcv"]
+    deal_price = "close"
+    initial_cash = 100000.0
+    fee_rate = 0.001
+    min_cost = 0.0
+
+    [factors.top23]
+    feature_set = "top23"
+
+    [labels.regression_72h]
+    kind = "regression"
+    horizon_hours = 72
+
+    [models.lgbm_regression_default]
+    model_type = "lightgbm"
+    objective = "mse"
+
+    [training.single_full]
+    run_mode = "single"
+    training_window = "all"
+
+    [trading.score_weighted]
+    signal_kind = "score"
+    open_score = 0.60
+    close_score = 0.20
+    size_floor_score = 0.40
+    size_full_score = 0.80
+    curve_gamma = 1.5
+    max_position = 0.25
+    min_holding_hours = 24
+    cooldown_hours = 12
+    drawdown_de_risk_threshold = 0.02
+    de_risk_position = 0.0
+
+    [experiments.score_main]
+    data_profile = "btc_1h_full"
+    factor_profile = "top23"
+    label_profile = "regression_72h"
+    model_profile = "lgbm_regression_default"
+    training_profile = "single_full"
+    trade_profile = "score_weighted"
+    """
+
     def _write_config(self, body: str) -> Path:
         temp_dir = TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
@@ -317,6 +374,45 @@ class Phase2StrategyResearchTests(unittest.TestCase):
         selected = select_top_feasible_candidates(frame, limit=2)
 
         self.assertEqual(list(selected["candidate_id"]), ["d", "b"])
+
+    def test_run_strategy_config_uses_pred_score_in_shared_helper_path(self) -> None:
+        config_path = self._write_config(self.SCORE_CONFIG_TEXT)
+        runtime = load_runtime_config(config_path, experiment_name="score_main")
+        config = build_spot_strategy_config_from_runtime(runtime)
+
+        with TemporaryDirectory() as tmp:
+            pred_path = Path(tmp) / "pred_202401.pkl"
+            pd.DataFrame(
+                {"pred_score": [0.55]},
+                index=pd.to_datetime(["2024-01-01 00:00:00"]),
+            ).to_pickle(pred_path)
+
+            report = pd.DataFrame(
+                {
+                    "return": [0.01],
+                    "cost": [0.001],
+                    "turnover": [0.0],
+                    "value": [20_000.0],
+                    "account": [100_000.0],
+                },
+                index=pd.to_datetime(["2024-01-01 01:00:00"]),
+            )
+            captured: dict[str, object] = {}
+
+            def fake_run_qlib_backtest(signal, backtest_config):
+                captured["signal"] = signal.copy()
+                captured["config"] = backtest_config
+                return report, {"BTCUSDT": 0.2}, None
+
+            with patch(
+                "nusri_project.strategy.phase2_strategy_research.run_qlib_backtest",
+                side_effect=fake_run_qlib_backtest,
+            ):
+                summary = run_strategy_config([pred_path], config)
+
+        self.assertEqual(captured["config"].signal_kind, "score")
+        self.assertAlmostEqual(float(captured["signal"].iloc[0, 0]), 0.55)
+        self.assertIn("total_return", summary)
 
 
 if __name__ == "__main__":
