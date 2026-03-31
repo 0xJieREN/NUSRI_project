@@ -223,6 +223,28 @@ class RuntimeConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_runtime_config(config_path)
 
+    def test_load_runtime_config_rejects_training_window_all_with_explicit_months(self) -> None:
+        config_path = self._write_config(
+            CONFIG_TEXT.replace(
+                'training_window = "all"',
+                'training_window = "all"\ntraining_window_months = 24',
+            )
+        )
+
+        with self.assertRaises(ValueError):
+            load_runtime_config(config_path, experiment_name="regression_main")
+
+    def test_load_runtime_config_rejects_training_profile_without_window_definition(self) -> None:
+        config_path = self._write_config(
+            CONFIG_TEXT.replace(
+                '[training.single_full]\nrun_mode = "single"\ntraining_window = "all"\n',
+                '[training.single_full]\nrun_mode = "single"\n',
+            )
+        )
+
+        with self.assertRaises(ValueError):
+            load_runtime_config(config_path, experiment_name="regression_main")
+
     def test_load_runtime_config_rejects_invalid_sample_weight_mode(self) -> None:
         config_path = self._write_config(
             CONFIG_TEXT.replace('sample_weight_mode = "uniform"', 'sample_weight_mode = "mystery"')

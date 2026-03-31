@@ -163,6 +163,10 @@ def _build_training_config(raw: dict) -> TrainingConfig:
         if "training_window_months" in raw
         else None
     )
+    if raw_training_window is None and explicit_training_window_months is None:
+        raise ValueError("training config requires training_window or training_window_months")
+    if raw_training_window == "all" and explicit_training_window_months is not None:
+        raise ValueError("training_window='all' cannot be combined with training_window_months")
     if (
         explicit_training_window_months is not None
         and legacy_training_window_months is not None
