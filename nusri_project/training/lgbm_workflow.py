@@ -12,13 +12,10 @@ from qlib.utils import init_instance_by_config
 from qlib.workflow import R
 from nusri_project.config.alpha261_config import get_alpha261_config, get_top23_config
 from nusri_project.config.runtime_config import load_runtime_config
-from nusri_project.config.schemas import ExperimentRuntimeConfig
+from nusri_project.config.schemas import ExperimentRuntimeConfig, TrainingConfig
 from nusri_project.training.label_factory import (
-    build_label_config,
     build_label_mode_config,
     get_backtest_target_expr,
-    get_cost_aware_binary_label_expr,
-    get_label_expr,
     get_label_mode_from_config,
     get_prediction_output_column,
 )
@@ -27,6 +24,7 @@ from nusri_project.training.model_factory import (
     build_model_config_from_runtime,
     get_model_loss,
 )
+from nusri_project.training.time_decay_reweighter import ExpHalflifeReweighter
 
 PROVIDER_URI = "./qlib_data/my_crypto_data"
 DEFAULT_FEATURE_SET = "top23"
@@ -45,6 +43,7 @@ DATA_END_TIME = "2025-12-31 23:00:00"
 ROLLING_START = "2024-01-01 00:00:00"
 ROLLING_END = "2025-12-31 23:00:00"
 ROLLING_TRAIN_YEARS = 2
+DEFAULT_TRAINING_WINDOW_MONTHS = ROLLING_TRAIN_YEARS * 12
 
 
 @dataclass(frozen=True)
@@ -192,6 +191,50 @@ def build_conf(
 conf = build_conf()
 
 
+def _default_training_config(run_mode: str) -> TrainingConfig:
+    if run_mode == "rolling":
+        return TrainingConfig(
+            run_mode="rolling",
+            training_window="2y",
+            training_window_months=DEFAULT_TRAINING_WINDOW_MONTHS,
+            rolling_step_months=1,
+        )
+    if run_mode == "single":
+        return TrainingConfig(
+            run_mode="single",
+            training_window="all",
+            training_window_months=None,
+        )
+    raise ValueError(f"Unknown RUN_MODE: {run_mode}")
+
+
+def _resolve_train_start(
+    month_start: pd.Timestamp,
+    training: TrainingConfig,
+    data_start_ts: pd.Timestamp,
+) -> pd.Timestamp:
+    if training.training_window_months is None:
+        return data_start_ts
+    train_start = month_start - pd.DateOffset(months=training.training_window_months)
+    return max(train_start, data_start_ts)
+
+
+def _build_reweighter(
+    training: TrainingConfig,
+    train_end_dt: datetime,
+):
+    if training.sample_weight_mode == "uniform":
+        return None
+    if training.sample_weight_mode == "exp_halflife":
+        if training.half_life_months is None:
+            raise ValueError("exp_halflife sample weighting requires half_life_months")
+        return ExpHalflifeReweighter(
+            reference_time=train_end_dt.strftime("%Y-%m-%d %H:%M:%S"),
+            half_life_months=float(training.half_life_months),
+        )
+    raise ValueError(f"Unknown sample_weight_mode: {training.sample_weight_mode}")
+
+
 def _build_dataset_kwargs(
     conf: dict,
     train_start: str,
@@ -298,14 +341,19 @@ def run_single(
     label_horizon_hours: int = DEFAULT_LABEL_HORIZON_HOURS,
     label_mode: str = DEFAULT_LABEL_MODE,
     positive_threshold: float = DEFAULT_COST_AWARE_THRESHOLD,
+    training_config: TrainingConfig | None = None,
 ):
     workflow_conf = conf if workflow_conf is None else workflow_conf
+    training_config = _default_training_config("single") if training_config is None else training_config
     with R.start(experiment_name="btc_raw_return_lgb"):
         print("正在训练模型...")
 
         model = init_instance_by_config(workflow_conf["task"]["model"])
         dataset = init_instance_by_config(workflow_conf["task"]["dataset"])
-        model.fit(dataset)
+        train_end = workflow_conf["task"]["dataset"]["kwargs"]["segments"]["train"][1]
+        train_end_dt = datetime.strptime(train_end, "%Y-%m-%d %H:%M:%S")
+        reweighter = _build_reweighter(training_config, train_end_dt)
+        model.fit(dataset, reweighter=reweighter)
 
         recorder = R.get_recorder()
         valid_pred = _make_predictions(
@@ -340,8 +388,10 @@ def run_rolling_monthly(
     label_mode: str = DEFAULT_LABEL_MODE,
     positive_threshold: float = DEFAULT_COST_AWARE_THRESHOLD,
     prediction_output_dir: str | None = None,
+    training_config: TrainingConfig | None = None,
 ):
     workflow_conf = conf if workflow_conf is None else workflow_conf
+    training_config = _default_training_config("rolling") if training_config is None else training_config
     start_ts = pd.Timestamp(ROLLING_START)
     end_ts = pd.Timestamp(ROLLING_END)
     data_start_ts = pd.Timestamp(DATA_START_TIME)
@@ -358,9 +408,7 @@ def run_rolling_monthly(
             month_end = end_ts
 
         train_end = month_start - pd.Timedelta(hours=1)
-        train_start = month_start - pd.DateOffset(years=ROLLING_TRAIN_YEARS)
-        if train_start < data_start_ts:
-            train_start = data_start_ts
+        train_start = _resolve_train_start(month_start, training_config, data_start_ts)
 
         month_start_dt = cast(datetime, month_start.to_pydatetime())
         month_end_dt = cast(datetime, month_end.to_pydatetime())
@@ -383,7 +431,8 @@ def run_rolling_monthly(
         with R.start(experiment_name="btc_raw_return_lgb_rolling"):
             model = init_instance_by_config(workflow_conf["task"]["model"])
             dataset = init_instance_by_config(dataset_conf)
-            model.fit(dataset)
+            reweighter = _build_reweighter(training_config, train_end_dt)
+            model.fit(dataset, reweighter=reweighter)
 
             test_pred = _make_predictions(
                 dataset,
@@ -418,7 +467,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--label-horizon-hours", type=int, default=DEFAULT_LABEL_HORIZON_HOURS)
     parser.add_argument(
         "--label-mode",
-        choices=("regression_72h", "classification_72h_costaware"),
         default=DEFAULT_LABEL_MODE,
     )
     parser.add_argument("--cost-aware-threshold", type=float, default=DEFAULT_COST_AWARE_THRESHOLD)
@@ -459,6 +507,7 @@ def main() -> int:
             label_horizon_hours=label_horizon_hours,
             label_mode=label_mode,
             positive_threshold=positive_threshold,
+            training_config=bundle.runtime.training if args.config is not None else None,
         )
     elif run_mode == "rolling":
         run_rolling_monthly(
@@ -467,6 +516,7 @@ def main() -> int:
             label_mode=label_mode,
             positive_threshold=positive_threshold,
             prediction_output_dir=args.prediction_output_dir,
+            training_config=bundle.runtime.training if args.config is not None else None,
         )
     else:
         raise ValueError(f"Unknown RUN_MODE: {run_mode}")

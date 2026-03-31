@@ -18,9 +18,9 @@ DEFAULT_LGBM_KWARGS = {
 
 
 def get_model_loss(label_mode: str) -> str:
-    if label_mode.startswith("regression"):
+    if label_mode.startswith("regression_"):
         return "mse"
-    if label_mode == "classification_72h_costaware":
+    if label_mode.startswith("classification_") and label_mode.endswith("_costaware"):
         return "binary"
     raise ValueError(f"Unknown label_mode: {label_mode}")
 
