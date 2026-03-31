@@ -66,11 +66,15 @@ def fuse_component_predictions(
     *,
     weights: tuple[float, ...],
     output_column: str = "pred_score",
+    component_horizons: dict[str, int] | None = None,
 ) -> pd.DataFrame:
     if not component_frames:
         raise ValueError("component_frames must not be empty")
     if len(weights) != len(component_frames):
         raise ValueError("weights must match component frame count")
+    weight_sum = sum(weights)
+    if abs(weight_sum) <= 1e-12:
+        raise ValueError("fusion weights must not sum to zero")
 
     score_map = {
         name: frame["component_score"]
@@ -78,10 +82,14 @@ def fuse_component_predictions(
     }
     aligned_scores = pd.concat(score_map, axis=1).dropna()
     weight_series = pd.Series(weights, index=aligned_scores.columns, dtype=float)
-    fused_score = aligned_scores.mul(weight_series, axis=1).sum(axis=1) / weight_series.sum()
+    fused_score = aligned_scores.mul(weight_series, axis=1).sum(axis=1) / weight_sum
 
-    first_frame = next(iter(component_frames.values()))
-    aligned_return = first_frame.loc[aligned_scores.index, "real_return"]
+    target_component_name = _resolve_target_component_name(
+        component_frames,
+        aligned_scores.index,
+        component_horizons=component_horizons,
+    )
+    aligned_return = component_frames[target_component_name].loc[aligned_scores.index, "real_return"]
     return pd.DataFrame(
         {
             output_column: fused_score,
@@ -96,6 +104,36 @@ def build_component_prediction_artifact_name(component_name: str, month_label: s
 
 def build_fused_prediction_artifact_name(month_label: str) -> str:
     return f"pred_fused_{month_label.replace('-', '')}.pkl"
+
+
+def _resolve_target_component_name(
+    component_frames: dict[str, pd.DataFrame],
+    aligned_index: pd.Index,
+    *,
+    component_horizons: dict[str, int] | None,
+) -> str:
+    component_names = tuple(component_frames.keys())
+    if component_horizons is not None:
+        missing = [name for name in component_names if name not in component_horizons]
+        if missing:
+            raise ValueError(f"missing component horizons for: {', '.join(missing)}")
+        longest_horizon = max(component_horizons[name] for name in component_names)
+        target_components = [
+            name for name in component_names if component_horizons[name] == longest_horizon
+        ]
+        if len(target_components) != 1:
+            raise ValueError("fused target component must have a unique longest label horizon")
+        return target_components[0]
+
+    reference_name = component_names[0]
+    reference_return = component_frames[reference_name].loc[aligned_index, "real_return"]
+    for name in component_names[1:]:
+        candidate_return = component_frames[name].loc[aligned_index, "real_return"]
+        if not reference_return.equals(candidate_return):
+            raise ValueError(
+                "component real_return columns differ; provide component_horizons to select the fused target"
+            )
+    return reference_name
 
 
 def _build_component_workflow_conf(
@@ -189,6 +227,19 @@ def _resolve_fusion_frequency(runtime: FusedExperimentRuntimeConfig) -> str:
     return next(iter(frequencies))
 
 
+def _resolve_shared_rolling_step_months(runtime: FusedExperimentRuntimeConfig) -> int:
+    step_months = {
+        component.training.rolling_step_months
+        for component in runtime.components
+    }
+    if len(step_months) != 1:
+        raise ValueError("all fused components must share the same rolling_step_months")
+    resolved_step = next(iter(step_months))
+    if resolved_step is None or resolved_step <= 0:
+        raise ValueError("fused components require a positive rolling_step_months")
+    return resolved_step
+
+
 def _resolve_prediction_output_dir(
     prediction_output_dir: str | Path | None,
     runtime: FusedExperimentRuntimeConfig,
@@ -203,16 +254,24 @@ def run_fused_rolling_workflow(
     *,
     prediction_output_dir: str | Path | None = None,
 ) -> dict[str, list[pd.DataFrame]]:
+    if abs(sum(runtime.fusion.weights)) <= 1e-12:
+        raise ValueError("fusion weights must not sum to zero")
+
     output_dir = _resolve_prediction_output_dir(prediction_output_dir, runtime)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     start_ts = max(pd.Timestamp(ROLLING_START), pd.Timestamp(runtime.data.start_time))
     end_ts = min(pd.Timestamp(ROLLING_END), pd.Timestamp(runtime.data.end_time))
     rolling_freq = _resolve_fusion_frequency(runtime)
+    rolling_step_months = _resolve_shared_rolling_step_months(runtime)
+    component_horizons = {
+        component.name: component.label.horizon_hours
+        for component in runtime.components
+    }
 
     yearly_results: dict[str, list[pd.DataFrame]] = {}
     for month_start in pd.date_range(start=start_ts, end=end_ts, freq=rolling_freq):
-        next_month_start = month_start + pd.DateOffset(months=1)
+        next_month_start = month_start + pd.DateOffset(months=rolling_step_months)
         month_end = min(next_month_start - pd.Timedelta(hours=1), end_ts)
         month_label = month_start.strftime("%Y-%m")
         year_key = month_start.strftime("%Y")
@@ -248,6 +307,7 @@ def run_fused_rolling_workflow(
             component_frames,
             weights=runtime.fusion.weights,
             output_column=runtime.fusion.output_column,
+            component_horizons=component_horizons,
         )
         fused.to_pickle(output_dir / build_fused_prediction_artifact_name(month_label))
         yearly_results.setdefault(year_key, []).append(fused)

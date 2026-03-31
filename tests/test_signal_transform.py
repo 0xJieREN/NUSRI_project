@@ -29,6 +29,7 @@ class SignalTransformTests(unittest.TestCase):
 
         self.assertTrue((result <= 1.0).all())
         self.assertTrue((result >= -1.0).all())
+        self.assertAlmostEqual(result.iloc[0], ((3.0 - 1.5) / 1.4826) / 3.0, places=6)
 
     def test_robust_norm_clip_falls_back_to_std_when_mad_is_zero(self) -> None:
         train = pd.Series([1.0, 1.0, 1.0, 3.0])
