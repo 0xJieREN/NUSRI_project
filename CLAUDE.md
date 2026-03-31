@@ -6,11 +6,15 @@ This file provides guidance when working with code in this repository.
 
 Python 3.12 cryptocurrency research repository using QLib and LightGBM for BTCUSDT trading research.
 
-The current direction is a config-driven workflow:
+The current direction is a config-driven workflow, and the mainline has already converged to:
 
 - `config.toml` is the research configuration source of truth
 - return-signal trading and probability-signal trading are separated
 - QLib-first training and backtesting remain the execution backbone
+- current mainline: `top23 + classification_72h_costaware(0.006) + rolling_2y_monthly + prob_conservative`
+
+Latest comparison summary:
+- `docs/research/2026-03-24-cost-aware-mainline-comparison.md`
 
 ## Environment
 
@@ -37,8 +41,8 @@ uv run python -m scripts.training.lgbm_workflow --config config.toml --experimen
 # Backtest via config
 uv run python -m scripts.analysis.backtest_spot_strategy --pred-glob "/absolute/path/to/pred_*.pkl" --config config.toml --experiment-profile cost_aware_main
 
-# Run cost-aware comparison
-uv run python -m scripts.analysis.run_cost_aware_label_round1 --predictions-root reports/costaware-preds --config config.toml --experiment-profile cost_aware_main --year 2025
+# Run probability-shell scan on the current mainline
+uv run python -m scripts.analysis.run_72h_trade_tuning --predictions-root reports/costaware-prob-preds --config config.toml --experiment-profile cost_aware_main --year 2024
 ```
 
 ## Architecture
@@ -55,7 +59,7 @@ nusri_project/strategy/*                  → Strategy and scan helpers
 
 **Key modules:**
 - `nusri_project/config/alpha261_config.py` — Alpha261 and Top23 feature configurations
-- `nusri_project/training/lgbm_workflow.py` — Model training with single/rolling modes, configurable feature sets
+- `nusri_project/training/lgbm_workflow.py` — Model training with config-driven single/rolling modes
 - `nusri_project/strategy/backtest_spot_strategy.py` — QLib-first spot backtest wrapper
 - `nusri_project/strategy/phase2_strategy_research.py` — phase 2 scan helpers
 - `qlib_data/my_crypto_data/` — QLib binary data directory
@@ -66,6 +70,14 @@ nusri_project/strategy/*                  → Strategy and scan helpers
 **Important strategy split:**
 - Return mode emits `pred_return` and uses return thresholds
 - Classification mode emits `pred_prob` and uses probability thresholds
+
+**Current mainline settings:**
+- factor set: `top23`
+- label: `classification_72h_costaware`
+- threshold: `positive_threshold = 0.006`
+- model objective: `binary`
+- training window: `rolling_2y_monthly`
+- trade profile: `prob_conservative`
 
 ## Data Paths
 
@@ -82,5 +94,10 @@ nusri_project/strategy/*                  → Strategy and scan helpers
 - Alpha261 factor names must be unique (raises `ValueError` on duplicates)
 - Do not commit: `qlib_data/`, `mlruns/`, large CSV files (see `.gitignore`)
 - `nusri_project/strategy/strategy_config.py` is now a runtime transport/compatibility layer, not the source of truth for research defaults
+- Mainline comparison results are documented in `docs/research/2026-03-24-cost-aware-mainline-comparison.md`
+- The current best-known mainline result files are:
+  - `reports/cost-thr-006-2024/summary.json`
+  - `reports/cost-thr-006-2025/summary.json`
+- Historical comparison experiments such as `top15/top10`, `0.004/0.005`, and `18m/1y` are treated as completed analysis conclusions, not ongoing mainline configs
 - Before writing custom backtest or portfolio-analysis code, check whether QLib already provides the needed capability through `qlib.backtest.backtest`, `qlib.contrib.evaluate.backtest_daily`, or `qlib.workflow.record_temp.PortAnaRecord`
 - If QLib has a suitable built-in path, prefer configuring and integrating it over maintaining a parallel handwritten backtest stack

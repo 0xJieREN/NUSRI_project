@@ -3,7 +3,18 @@
 本仓库是 Python 3.12 的加密货币价格预测项目：
 - QLib：数据处理 / 特征工程 / 数据集抽象
 - LightGBM：通过 QLib `LGBModel` 训练
-- 当前主线正在迁移到 `config.toml` 驱动的研究工作流
+- 当前主线已经收敛到 `config.toml` 驱动的研究工作流
+
+当前唯一主线配置：
+- 因子：`top23`
+- 标签：`classification_72h_costaware`
+- 成本阈值：`positive_threshold = 0.006`
+- 模型：`LightGBM binary`
+- 训练窗口：`rolling_2y_monthly`
+- 交易壳：`prob_conservative`
+
+最新研究结论文档：
+- `docs/research/2026-03-24-cost-aware-mainline-comparison.md`
 
 规则来源检查结果：
 - 未发现 Cursor 规则：`.cursor/rules/`、`.cursorrules`
@@ -60,7 +71,10 @@
 
 - `uv run python -m scripts.training.lgbm_workflow --config config.toml --experiment-profile cost_aware_main`
 
-兼容旧参数模式：
+当前 `cost_aware_main` 的实际含义：
+- `top23 + classification_72h_costaware(0.006) + rolling_2y_monthly + prob_conservative`
+
+兼容旧参数模式（仅保留兼容，不作为研究主入口）：
 
 - `uv run python -m scripts.training.lgbm_workflow`
 
@@ -76,8 +90,13 @@
 
 - `uv run python -m scripts.analysis.backtest_spot_strategy --pred-glob "/absolute/path/to/pred_*.pkl" --config config.toml --experiment-profile cost_aware_main`
 - `uv run python -m scripts.analysis.run_phase2_baseline --mlruns-root ./mlruns --config config.toml --experiment-profile regression_72h_main --year 2024 --scan`
-- `uv run python -m scripts.analysis.run_72h_trade_tuning --predictions-root reports/costaware-preds --config config.toml --experiment-profile regression_72h_main --year 2024`
+- `uv run python -m scripts.analysis.run_72h_trade_tuning --predictions-root reports/costaware-prob-preds --config config.toml --experiment-profile cost_aware_main --year 2024`
 - `uv run python -m scripts.analysis.run_cost_aware_label_round1 --predictions-root reports/costaware-preds --config config.toml --experiment-profile cost_aware_main --year 2025`
+
+当前最重要的结果文件：
+- `reports/cost-thr-006-2024/summary.json`
+- `reports/cost-thr-006-2025/summary.json`
+- `docs/research/2026-03-24-cost-aware-mainline-comparison.md`
 
 ---
 
@@ -86,13 +105,14 @@
 ### 3.1 当前仓库状态
 
 - 未配置 pytest（未发现 `pytest.ini` / `conftest.py` / `pyproject` pytest 配置）
-- `.gitignore` 忽略 `test/`，但其中有 `test/test_qlib.py`（更像 smoke test）
+- 当前测试主入口是标准库 `unittest`
+- 回测、配置、训练工作流相关测试已经覆盖主线
 
 ### 3.2 现有 smoke test（QLib 读数据）
 
-- `uv run python test/test_qlib.py`
+- `uv run python -m unittest tests.test_phase2_strategy_research tests.test_research_profiles tests.test_runtime_config tests.test_lgbm_workflow_config tests.test_analysis_entrypoints_config tests.test_probability_signal_strategy tests.test_backtest_spot_strategy -v`
 
-用途：验证 `qlib_data/my_crypto_data` 是否能被 QLib 正常加载。
+用途：验证当前主线的配置驱动训练、概率交易壳、扫描器和回测层。
 
 ### 3.3 若未来引入 pytest（建议的统一命令）
 
@@ -164,8 +184,14 @@
 - 研究配置真源：`./config.toml`
 - `nusri_project/config/alpha261_config.py` 因子名必须唯一（重复会 `raise ValueError("duplicate factor name")`）
 - 分类标签输出列使用 `pred_prob`；回归标签输出列使用 `pred_return`
+- 当前主线标签定义：
+  - `round_trip_cost = 0.002`
+  - `safety_margin = 0.004`
+  - `positive_threshold = 0.006`
 - 分类交易层比较概率阈值：`enter_prob_threshold / exit_prob_threshold / full_prob_threshold`
 - 回归交易层比较收益阈值：`entry_threshold / exit_threshold / full_position_threshold`
+- 当前主线训练窗口保留 `rolling_2y_monthly`
+- `top15/top10`、`18m/1y`、`0.004/0.005` 等仅作为已完成的对比实验结论保留在 `docs/research/2026-03-24-cost-aware-mainline-comparison.md`，不再作为长期主线配置
 - 涉及策略回测、执行器、交易成本、组合分析时，先检查 `Qlib` 官方现成能力是否已覆盖，例如 `qlib.backtest.backtest`、`qlib.contrib.evaluate.backtest_daily`、`qlib.workflow.record_temp.PortAnaRecord`
 - 如果 `Qlib` 已有合适能力，优先通过配置、封装和对接现有接口实现；不要先手写一套平行回测框架
 - 只有在 `Qlib` 现成接口无法准确表达当前需求时，才允许补充自定义实现；并在代码或文档中明确说明缺口
