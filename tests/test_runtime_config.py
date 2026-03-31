@@ -212,6 +212,36 @@ class RuntimeConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_runtime_config(config_path)
 
+    def test_load_runtime_config_rejects_conflicting_training_window_and_months(self) -> None:
+        config_path = self._write_config(
+            CONFIG_TEXT.replace(
+                'training_window = "2y"\nrolling_step_months = 1',
+                'training_window = "2y"\ntraining_window_months = 12\nrolling_step_months = 1',
+            )
+        )
+
+        with self.assertRaises(ValueError):
+            load_runtime_config(config_path)
+
+    def test_load_runtime_config_rejects_invalid_sample_weight_mode(self) -> None:
+        config_path = self._write_config(
+            CONFIG_TEXT.replace('sample_weight_mode = "uniform"', 'sample_weight_mode = "mystery"')
+        )
+
+        with self.assertRaises(ValueError):
+            load_fused_runtime_config(config_path, experiment_name="regression_fused_main")
+
+    def test_load_runtime_config_rejects_uniform_sample_weight_with_half_life(self) -> None:
+        config_path = self._write_config(
+            CONFIG_TEXT.replace(
+                'sample_weight_mode = "uniform"',
+                'sample_weight_mode = "uniform"\nhalf_life_months = 6',
+            )
+        )
+
+        with self.assertRaises(ValueError):
+            load_fused_runtime_config(config_path, experiment_name="regression_fused_main")
+
     def test_load_fused_runtime_config_resolves_component_specific_factor_profile(self) -> None:
         config_path = self._write_config()
 
@@ -232,6 +262,17 @@ class RuntimeConfigTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             load_fused_runtime_config(bad_path, experiment_name="regression_fused_main")
+
+    def test_load_fused_runtime_config_falls_back_to_defaults_factor_profile(self) -> None:
+        config_path = self._write_config(
+            CONFIG_TEXT.replace('factor_profile = "top23"\nfusion_profile = "regression_fused_main"\n', 'fusion_profile = "regression_fused_main"\n')
+            .replace('factor_profile = "top23"\nlabel_profile = "regression_72h"\n', 'label_profile = "regression_72h"\n')
+        )
+
+        runtime = load_fused_runtime_config(config_path, experiment_name="regression_fused_main")
+
+        self.assertEqual(runtime.components[0].factor.feature_set, "top23")
+        self.assertEqual(runtime.components[1].factor.feature_set, "top23")
 
 
 if __name__ == "__main__":

@@ -153,15 +153,30 @@ def _legacy_training_window_to_months(raw_window: str | None) -> int | None:
 
 def _build_training_config(raw: dict) -> TrainingConfig:
     raw_training_window = str(raw["training_window"]) if "training_window" in raw else None
-    raw_training_window_months = (
+    legacy_training_window_months = (
+        _legacy_training_window_to_months(raw_training_window)
+        if raw_training_window is not None
+        else None
+    )
+    explicit_training_window_months = (
         int(raw["training_window_months"])
         if "training_window_months" in raw
-        else _legacy_training_window_to_months(raw_training_window)
+        else None
     )
+    if (
+        explicit_training_window_months is not None
+        and legacy_training_window_months is not None
+        and explicit_training_window_months != legacy_training_window_months
+    ):
+        raise ValueError("training_window and training_window_months must resolve to the same duration")
     training = TrainingConfig(
         run_mode=str(raw["run_mode"]),
         training_window=raw_training_window,
-        training_window_months=raw_training_window_months,
+        training_window_months=(
+            explicit_training_window_months
+            if explicit_training_window_months is not None
+            else legacy_training_window_months
+        ),
         rolling_step_months=int(raw["rolling_step_months"]) if "rolling_step_months" in raw else None,
         sample_weight_mode=str(raw.get("sample_weight_mode", "uniform")),
         half_life_months=float(raw["half_life_months"]) if "half_life_months" in raw else None,
