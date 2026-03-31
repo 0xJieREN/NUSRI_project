@@ -48,6 +48,17 @@ class ExpHalflifeReweighterTests(unittest.TestCase):
 
         self.assertIsNone(reweighter)
 
+    def test_build_reweighter_rejects_exp_halflife_for_single_run_mode(self) -> None:
+        training = TrainingConfig(
+            run_mode="single",
+            training_window="all",
+            sample_weight_mode="exp_halflife",
+            half_life_months=6,
+        )
+
+        with self.assertRaises(ValueError):
+            _build_reweighter(training, datetime(2025, 1, 31, 23, 0, 0))
+
     def test_build_reweighter_rejects_unknown_mode(self) -> None:
         training = TrainingConfig(
             run_mode="rolling",

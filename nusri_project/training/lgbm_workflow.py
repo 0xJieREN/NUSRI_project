@@ -219,6 +219,12 @@ def _resolve_train_start(
     return max(train_start, data_start_ts)
 
 
+def _resolve_rolling_frequency(training: TrainingConfig) -> str:
+    if training.rolling_step_months is None or training.rolling_step_months <= 0:
+        raise ValueError("rolling run_mode requires a positive rolling_step_months")
+    return "MS" if training.rolling_step_months == 1 else f"{training.rolling_step_months}MS"
+
+
 def _build_reweighter(
     training: TrainingConfig,
     train_end_dt: datetime,
@@ -226,6 +232,8 @@ def _build_reweighter(
     if training.sample_weight_mode == "uniform":
         return None
     if training.sample_weight_mode == "exp_halflife":
+        if training.run_mode == "single":
+            raise ValueError("single run_mode does not support exp_halflife sample weighting")
         if training.half_life_months is None:
             raise ValueError("exp_halflife sample weighting requires half_life_months")
         return ExpHalflifeReweighter(
@@ -395,13 +403,14 @@ def run_rolling_monthly(
     start_ts = pd.Timestamp(ROLLING_START)
     end_ts = pd.Timestamp(ROLLING_END)
     data_start_ts = pd.Timestamp(DATA_START_TIME)
+    rolling_freq = _resolve_rolling_frequency(training_config)
 
     yearly_results: dict[str, list[pd.DataFrame]] = {}
     pred_output_path = None if prediction_output_dir is None else Path(prediction_output_dir)
     if pred_output_path is not None:
         pred_output_path.mkdir(parents=True, exist_ok=True)
 
-    for month_start in pd.date_range(start=start_ts, end=end_ts, freq="MS"):
+    for month_start in pd.date_range(start=start_ts, end=end_ts, freq=rolling_freq):
         next_month_start = month_start + pd.DateOffset(months=1)
         month_end = next_month_start - pd.Timedelta(hours=1)
         if month_end > end_ts:
