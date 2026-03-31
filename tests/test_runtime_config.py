@@ -242,6 +242,25 @@ class RuntimeConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_fused_runtime_config(config_path, experiment_name="regression_fused_main")
 
+    def test_load_runtime_config_rejects_exp_halflife_without_positive_half_life(self) -> None:
+        missing_half_life_path = self._write_config(
+            CONFIG_TEXT.replace(
+                'sample_weight_mode = "exp_halflife"\nhalf_life_months = 6',
+                'sample_weight_mode = "exp_halflife"',
+            )
+        )
+        nonpositive_half_life_path = self._write_config(
+            CONFIG_TEXT.replace(
+                'half_life_months = 6',
+                'half_life_months = 0',
+            )
+        )
+
+        with self.assertRaises(ValueError):
+            load_fused_runtime_config(missing_half_life_path, experiment_name="regression_fused_main")
+        with self.assertRaises(ValueError):
+            load_fused_runtime_config(nonpositive_half_life_path, experiment_name="regression_fused_main")
+
     def test_load_fused_runtime_config_resolves_component_specific_factor_profile(self) -> None:
         config_path = self._write_config()
 
@@ -273,6 +292,17 @@ class RuntimeConfigTests(unittest.TestCase):
 
         self.assertEqual(runtime.components[0].factor.feature_set, "top23")
         self.assertEqual(runtime.components[1].factor.feature_set, "top23")
+
+    def test_load_fused_runtime_config_allows_missing_fallback_factor_when_components_define_their_own(self) -> None:
+        config_path = self._write_config(
+            CONFIG_TEXT.replace('[defaults]\ndata_profile = "btc_1h_full"\nfactor_profile = "top23"\n', '[defaults]\ndata_profile = "btc_1h_full"\n')
+            .replace('[experiments.regression_fused_main]\ndata_profile = "btc_1h_full"\nfactor_profile = "top23"\n', '[experiments.regression_fused_main]\ndata_profile = "btc_1h_full"\n')
+            .replace('[signal_components.reg_24h]\n', '[signal_components.reg_24h]\nfactor_profile = "top23"\n')
+        )
+
+        runtime = load_fused_runtime_config(config_path, experiment_name="regression_fused_main")
+
+        self.assertEqual(tuple(component.factor.feature_set for component in runtime.components), ("top23", "top23"))
 
 
 if __name__ == "__main__":

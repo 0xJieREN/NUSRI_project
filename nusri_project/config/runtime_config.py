@@ -294,9 +294,11 @@ def load_fused_runtime_config(
     data_profile = _resolve_profile_name(experiment_raw, defaults, field_name="data_profile")
     fusion_profile = _resolve_profile_name(experiment_raw, defaults, field_name="fusion_profile")
     experiment_factor_profile = experiment_raw.get("factor_profile", defaults.get("factor_profile"))
-    if experiment_factor_profile in {None, ""}:
-        raise ValueError("experiment profile resolution failed; missing factor_profile")
-    resolved_experiment_factor_profile = str(experiment_factor_profile)
+    resolved_experiment_factor_profile = (
+        str(experiment_factor_profile)
+        if experiment_factor_profile not in {None, ""}
+        else None
+    )
 
     data = _build_data_config(_require_named_section(config, "data", data_profile))
     fusion = _build_fusion_profile_config(
@@ -311,6 +313,10 @@ def load_fused_runtime_config(
             _require_named_section(config, "signal_components", component_name),
         )
         factor_profile = component_config.factor_profile or resolved_experiment_factor_profile
+        if factor_profile is None:
+            raise ValueError(
+                f"component {component_name} requires factor_profile or an experiment/default fallback"
+            )
         components.append(
             SignalComponentRuntimeConfig(
                 name=component_config.name,
