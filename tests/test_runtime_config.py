@@ -5,7 +5,10 @@ from tempfile import TemporaryDirectory
 import textwrap
 import unittest
 
-from nusri_project.config.runtime_config import load_runtime_config
+from nusri_project.config.runtime_config import (
+    load_fused_runtime_config,
+    load_runtime_config,
+)
 
 
 CONFIG_TEXT = """
@@ -37,6 +40,10 @@ feature_set = "top23"
 kind = "regression"
 horizon_hours = 72
 
+[labels.regression_24h]
+kind = "regression"
+horizon_hours = 24
+
 [labels.classification_72h_costaware]
 kind = "classification_costaware"
 horizon_hours = 72
@@ -56,6 +63,19 @@ objective = "mse"
 run_mode = "rolling"
 training_window = "2y"
 rolling_step_months = 1
+
+[training.rolling_24m_uniform]
+run_mode = "rolling"
+training_window_months = 24
+rolling_step_months = 1
+sample_weight_mode = "uniform"
+
+[training.rolling_24m_halflife_6m]
+run_mode = "rolling"
+training_window_months = 24
+rolling_step_months = 1
+sample_weight_mode = "exp_halflife"
+half_life_months = 6
 
 [training.single_full]
 run_mode = "single"
@@ -98,6 +118,30 @@ label_profile = "regression_72h"
 model_profile = "lgbm_regression_default"
 training_profile = "single_full"
 trade_profile = "return_balanced"
+
+[experiments.regression_fused_main]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+fusion_profile = "regression_fused_main"
+
+[signal_components.reg_24h]
+label_profile = "regression_24h"
+model_profile = "lgbm_regression_default"
+training_profile = "rolling_24m_uniform"
+
+[signal_components.reg_72h]
+factor_profile = "top23"
+label_profile = "regression_72h"
+model_profile = "lgbm_regression_default"
+training_profile = "rolling_24m_halflife_6m"
+
+[fusion_profiles.regression_fused_main]
+components = ["reg_24h", "reg_72h"]
+weights = [0.4, 0.6]
+component_transform = "robust_norm_clip"
+transform_fit_scope = "train_only"
+output_column = "pred_score"
+cache_component_predictions = false
 """
 
 
@@ -167,6 +211,27 @@ class RuntimeConfigTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             load_runtime_config(config_path)
+
+    def test_load_fused_runtime_config_resolves_component_specific_factor_profile(self) -> None:
+        config_path = self._write_config()
+
+        runtime = load_fused_runtime_config(config_path, experiment_name="regression_fused_main")
+
+        self.assertEqual(runtime.experiment_name, "regression_fused_main")
+        self.assertEqual(runtime.fusion.name, "regression_fused_main")
+        self.assertEqual(tuple(component.name for component in runtime.components), ("reg_24h", "reg_72h"))
+        self.assertEqual(runtime.components[0].factor.feature_set, "top23")
+        self.assertEqual(runtime.components[1].label.horizon_hours, 72)
+        self.assertEqual(runtime.components[0].training.sample_weight_mode, "uniform")
+        self.assertEqual(runtime.components[1].training.training_window_months, 24)
+
+    def test_load_fused_runtime_config_rejects_weight_count_mismatch(self) -> None:
+        bad_path = self._write_config(
+            CONFIG_TEXT.replace('weights = [0.4, 0.6]', 'weights = [1.0]')
+        )
+
+        with self.assertRaises(ValueError):
+            load_fused_runtime_config(bad_path, experiment_name="regression_fused_main")
 
 
 if __name__ == "__main__":

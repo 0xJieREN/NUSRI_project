@@ -8,8 +8,12 @@ from nusri_project.config.schemas import (
     DataConfig,
     ExperimentRuntimeConfig,
     FactorConfig,
+    FusedExperimentRuntimeConfig,
+    FusionProfileConfig,
     LabelConfig,
     ModelConfig,
+    SignalComponentConfig,
+    SignalComponentRuntimeConfig,
     TradeConfig,
     TrainingConfig,
 )
@@ -46,10 +50,19 @@ def _validate_label_config(label: LabelConfig) -> None:
 def _validate_training_config(training: TrainingConfig) -> None:
     if training.run_mode not in {"rolling", "single"}:
         raise ValueError(f"unsupported training run_mode: {training.run_mode}")
-    if training.training_window not in {"all", "2y"}:
+    if training.training_window is not None and training.training_window not in {"all", "2y"}:
         raise ValueError(f"unsupported training_window: {training.training_window}")
+    if training.training_window_months is not None and training.training_window_months <= 0:
+        raise ValueError("training_window_months must be positive")
     if training.run_mode == "rolling" and not training.rolling_step_months:
         raise ValueError("rolling run_mode requires rolling_step_months")
+    if training.sample_weight_mode not in {"uniform", "exp_halflife"}:
+        raise ValueError(f"unsupported sample_weight_mode: {training.sample_weight_mode}")
+    if training.sample_weight_mode == "exp_halflife":
+        if training.half_life_months is None or training.half_life_months <= 0:
+            raise ValueError("exp_halflife sample weighting requires positive half_life_months")
+    elif training.half_life_months is not None:
+        raise ValueError("half_life_months is only supported with exp_halflife sample weighting")
 
 
 def _validate_trade_config(trade: TradeConfig) -> None:
@@ -130,14 +143,59 @@ def _build_model_config(raw: dict) -> ModelConfig:
     )
 
 
+def _legacy_training_window_to_months(raw_window: str | None) -> int | None:
+    if raw_window == "all":
+        return None
+    if raw_window == "2y":
+        return 24
+    raise ValueError(f"unsupported training_window: {raw_window}")
+
+
 def _build_training_config(raw: dict) -> TrainingConfig:
+    raw_training_window = str(raw["training_window"]) if "training_window" in raw else None
+    raw_training_window_months = (
+        int(raw["training_window_months"])
+        if "training_window_months" in raw
+        else _legacy_training_window_to_months(raw_training_window)
+    )
     training = TrainingConfig(
         run_mode=str(raw["run_mode"]),
-        training_window=str(raw["training_window"]),
+        training_window=raw_training_window,
+        training_window_months=raw_training_window_months,
         rolling_step_months=int(raw["rolling_step_months"]) if "rolling_step_months" in raw else None,
+        sample_weight_mode=str(raw.get("sample_weight_mode", "uniform")),
+        half_life_months=float(raw["half_life_months"]) if "half_life_months" in raw else None,
     )
     _validate_training_config(training)
     return training
+
+
+def _build_signal_component_config(name: str, raw: dict) -> SignalComponentConfig:
+    factor_profile = raw.get("factor_profile")
+    return SignalComponentConfig(
+        name=name,
+        factor_profile=str(factor_profile) if factor_profile is not None else None,
+        label_profile=str(raw["label_profile"]),
+        model_profile=str(raw["model_profile"]),
+        training_profile=str(raw["training_profile"]),
+    )
+
+
+def _build_fusion_profile_config(name: str, raw: dict) -> FusionProfileConfig:
+    components = tuple(str(component) for component in raw["components"])
+    weights = tuple(float(weight) for weight in raw["weights"])
+    fusion = FusionProfileConfig(
+        name=name,
+        components=components,
+        weights=weights,
+        component_transform=str(raw.get("component_transform", "robust_norm_clip")),
+        transform_fit_scope=str(raw.get("transform_fit_scope", "train_only")),
+        output_column=str(raw.get("output_column", "pred_score")),
+        cache_component_predictions=bool(raw.get("cache_component_predictions", False)),
+    )
+    if len(fusion.weights) != len(fusion.components):
+        raise ValueError("fusion profile weights must match component count")
+    return fusion
 
 
 def _build_trade_config(raw: dict) -> TradeConfig:
@@ -159,26 +217,38 @@ def _build_trade_config(raw: dict) -> TradeConfig:
     return trade
 
 
-def load_runtime_config(config_path: str | Path, experiment_name: str | None = None) -> ExperimentRuntimeConfig:
-    path = Path(config_path)
-    config = _read_toml(path)
+def _resolve_experiment_profile(config: dict, experiment_name: str | None = None) -> tuple[str, dict, dict]:
     defaults = config.get("defaults", {})
-
     selected_experiment = experiment_name or defaults.get("experiment_profile")
     if not selected_experiment:
         raise ValueError("no experiment profile was provided and defaults.experiment_profile is missing")
-
     experiment_raw = _require_named_section(config, "experiments", selected_experiment)
+    return str(selected_experiment), defaults, experiment_raw
 
-    data_profile = str(experiment_raw.get("data_profile", defaults.get("data_profile")))
-    factor_profile = str(experiment_raw.get("factor_profile", defaults.get("factor_profile")))
-    label_profile = str(experiment_raw.get("label_profile", defaults.get("label_profile")))
-    model_profile = str(experiment_raw.get("model_profile", defaults.get("model_profile")))
-    training_profile = str(experiment_raw.get("training_profile", defaults.get("training_profile")))
-    trade_profile = str(experiment_raw.get("trade_profile", defaults.get("trade_profile")))
 
-    if any(value in {"None", ""} for value in (data_profile, factor_profile, label_profile, model_profile, training_profile, trade_profile)):
-        raise ValueError("experiment profile resolution failed; missing profile reference")
+def _resolve_profile_name(
+    experiment_raw: dict,
+    defaults: dict,
+    *,
+    field_name: str,
+) -> str:
+    resolved = experiment_raw.get(field_name, defaults.get(field_name))
+    if resolved in {None, ""}:
+        raise ValueError(f"experiment profile resolution failed; missing {field_name}")
+    return str(resolved)
+
+
+def load_runtime_config(config_path: str | Path, experiment_name: str | None = None) -> ExperimentRuntimeConfig:
+    path = Path(config_path)
+    config = _read_toml(path)
+    selected_experiment, defaults, experiment_raw = _resolve_experiment_profile(config, experiment_name=experiment_name)
+
+    data_profile = _resolve_profile_name(experiment_raw, defaults, field_name="data_profile")
+    factor_profile = _resolve_profile_name(experiment_raw, defaults, field_name="factor_profile")
+    label_profile = _resolve_profile_name(experiment_raw, defaults, field_name="label_profile")
+    model_profile = _resolve_profile_name(experiment_raw, defaults, field_name="model_profile")
+    training_profile = _resolve_profile_name(experiment_raw, defaults, field_name="training_profile")
+    trade_profile = _resolve_profile_name(experiment_raw, defaults, field_name="trade_profile")
 
     data = _build_data_config(_require_named_section(config, "data", data_profile))
     factors = _build_factor_config(_require_named_section(config, "factors", factor_profile))
@@ -195,4 +265,52 @@ def load_runtime_config(config_path: str | Path, experiment_name: str | None = N
         model=model,
         training=training,
         trade=trade,
+    )
+
+
+def load_fused_runtime_config(
+    config_path: str | Path,
+    experiment_name: str | None = None,
+) -> FusedExperimentRuntimeConfig:
+    path = Path(config_path)
+    config = _read_toml(path)
+    selected_experiment, defaults, experiment_raw = _resolve_experiment_profile(config, experiment_name=experiment_name)
+
+    data_profile = _resolve_profile_name(experiment_raw, defaults, field_name="data_profile")
+    fusion_profile = _resolve_profile_name(experiment_raw, defaults, field_name="fusion_profile")
+    experiment_factor_profile = experiment_raw.get("factor_profile", defaults.get("factor_profile"))
+    if experiment_factor_profile in {None, ""}:
+        raise ValueError("experiment profile resolution failed; missing factor_profile")
+    resolved_experiment_factor_profile = str(experiment_factor_profile)
+
+    data = _build_data_config(_require_named_section(config, "data", data_profile))
+    fusion = _build_fusion_profile_config(
+        fusion_profile,
+        _require_named_section(config, "fusion_profiles", fusion_profile),
+    )
+
+    components: list[SignalComponentRuntimeConfig] = []
+    for component_name in fusion.components:
+        component_config = _build_signal_component_config(
+            component_name,
+            _require_named_section(config, "signal_components", component_name),
+        )
+        factor_profile = component_config.factor_profile or resolved_experiment_factor_profile
+        components.append(
+            SignalComponentRuntimeConfig(
+                name=component_config.name,
+                factor=_build_factor_config(_require_named_section(config, "factors", factor_profile)),
+                label=_build_label_config(_require_named_section(config, "labels", component_config.label_profile)),
+                model=_build_model_config(_require_named_section(config, "models", component_config.model_profile)),
+                training=_build_training_config(
+                    _require_named_section(config, "training", component_config.training_profile)
+                ),
+            )
+        )
+
+    return FusedExperimentRuntimeConfig(
+        experiment_name=selected_experiment,
+        data=data,
+        fusion=fusion,
+        components=tuple(components),
     )

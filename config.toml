@@ -76,6 +76,19 @@ run_mode = "rolling"
 training_window = "2y"
 rolling_step_months = 1
 
+[training.rolling_24m_uniform]
+run_mode = "rolling"
+training_window_months = 24
+rolling_step_months = 1
+sample_weight_mode = "uniform"
+
+[training.rolling_24m_halflife_6m]
+run_mode = "rolling"
+training_window_months = 24
+rolling_step_months = 1
+sample_weight_mode = "exp_halflife"
+half_life_months = 6
+
 [training.single_full]
 run_mode = "single"
 training_window = "all"
@@ -139,6 +152,30 @@ label_profile = "regression_72h"
 model_profile = "lgbm_regression_default"
 training_profile = "rolling_2y_monthly"
 trade_profile = "return_conservative"
+
+[experiments.regression_fused_main]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+fusion_profile = "regression_fused_main"
+
+[signal_components.reg_24h]
+label_profile = "regression_24h"
+model_profile = "lgbm_regression_default"
+training_profile = "rolling_24m_uniform"
+
+[signal_components.reg_72h]
+factor_profile = "top23"
+label_profile = "regression_72h"
+model_profile = "lgbm_regression_default"
+training_profile = "rolling_24m_halflife_6m"
+
+[fusion_profiles.regression_fused_main]
+components = ["reg_24h", "reg_72h"]
+weights = [0.4, 0.6]
+component_transform = "robust_norm_clip"
+transform_fit_scope = "train_only"
+output_column = "pred_score"
+cache_component_predictions = false
 
 [scan_profiles.small]
 kind = "grid"

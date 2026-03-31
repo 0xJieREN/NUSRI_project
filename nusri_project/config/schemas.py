@@ -41,8 +41,31 @@ class ModelConfig:
 @dataclass(frozen=True)
 class TrainingConfig:
     run_mode: str
-    training_window: str
+    training_window: str | None = None
+    training_window_months: int | None = None
     rolling_step_months: int | None = None
+    sample_weight_mode: str = "uniform"
+    half_life_months: float | None = None
+
+
+@dataclass(frozen=True)
+class SignalComponentConfig:
+    name: str
+    factor_profile: str | None
+    label_profile: str
+    model_profile: str
+    training_profile: str
+
+
+@dataclass(frozen=True)
+class FusionProfileConfig:
+    name: str
+    components: tuple[str, ...]
+    weights: tuple[float, ...]
+    component_transform: str = "robust_norm_clip"
+    transform_fit_scope: str = "train_only"
+    output_column: str = "pred_score"
+    cache_component_predictions: bool = False
 
 
 @dataclass(frozen=True)
@@ -70,3 +93,20 @@ class ExperimentRuntimeConfig:
     model: ModelConfig
     training: TrainingConfig
     trade: TradeConfig
+
+
+@dataclass(frozen=True)
+class SignalComponentRuntimeConfig:
+    name: str
+    factor: FactorConfig
+    label: LabelConfig
+    model: ModelConfig
+    training: TrainingConfig
+
+
+@dataclass(frozen=True)
+class FusedExperimentRuntimeConfig:
+    experiment_name: str
+    data: DataConfig
+    fusion: FusionProfileConfig
+    components: tuple[SignalComponentRuntimeConfig, ...]
