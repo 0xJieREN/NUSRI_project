@@ -1,5 +1,7 @@
 # Spot Strategy Research Design
 
+> **状态更新（2026-04-01）**：本设计文档保留为早期阶段研究设计记录。当前仓库推荐阶段已更新为 `regression_fused_aggressive_v3_best`，详见 `docs/research/2026-04-01-regression-fused-best-stage-summary.md`。
+
 **Goal**
 
 Build a repeatable research and backtesting flow for a BTCUSDT spot `long/flat` strategy that uses model predictions as timing signals and evaluates success by net strategy performance rather than prediction correlation alone.

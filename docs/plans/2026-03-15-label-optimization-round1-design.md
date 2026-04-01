@@ -1,5 +1,7 @@
 # Label Optimization Round 1 Design
 
+> **Status Update (2026-04-01):** This design is preserved as historical label-optimization context. The current recommended stage is `regression_fused_aggressive_v3_best`; see `docs/research/2026-04-01-regression-fused-best-stage-summary.md`.
+
 **Goal**
 
 Run the first controlled label-optimization round by comparing `24h`, `48h`, and `72h` forward-return regression labels under the already validated low-drawdown spot trading framework.

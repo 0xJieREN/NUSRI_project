@@ -1,5 +1,7 @@
 # Cost-Aware Optimization Experiment Plan
 
+> **状态更新（2026-04-01）**：本计划记录的是旧 `cost_aware_main` 主线的优化思路，现已被 `regression_fused_aggressive_v3_best` 取代。请优先参考 `docs/research/2026-04-01-regression-fused-best-stage-summary.md`。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在保持 `2025` 最大回撤显著低于 `10%` 的前提下，把 `cost_aware_main` 从当前“小幅正收益但过于保守”的状态推进到更高的风险调整后收益水平。
@@ -287,4 +289,3 @@ Pass if:
 - `feat: add classification feature comparison profiles`
 - `feat: compare training window profiles`
 - `docs: summarize cost-aware optimization experiment results`
-

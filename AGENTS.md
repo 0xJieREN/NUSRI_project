@@ -3,18 +3,19 @@
 本仓库是 Python 3.12 的加密货币价格预测项目：
 - QLib：数据处理 / 特征工程 / 数据集抽象
 - LightGBM：通过 QLib `LGBModel` 训练
-- 当前主线已经收敛到 `config.toml` 驱动的研究工作流
+- 当前研究工作流已经收敛到 `config.toml` 驱动的 fused signal + score execution 路径
 
-当前唯一主线配置：
+当前推荐的最佳阶段配置：
 - 因子：`top23`
-- 标签：`classification_72h_costaware`
-- 成本阈值：`positive_threshold = 0.006`
-- 模型：`LightGBM binary`
-- 训练窗口：`rolling_2y_monthly`
-- 交易壳：`prob_conservative`
+- 融合组件：`reg_24h + reg_72h`
+- 融合 profile：`regression_fused_main`
+- 模型：`LightGBM regression`
+- 训练窗口：`rolling_24m_halflife_6m`
+- 交易壳：`score_regression_aggressive_v3_best`
+- 对外实验：`regression_fused_aggressive_v3_best`
 
 最新研究结论文档：
-- `docs/research/2026-03-24-cost-aware-mainline-comparison.md`
+- `docs/research/2026-04-01-regression-fused-best-stage-summary.md`
 
 规则来源检查结果：
 - 未发现 Cursor 规则：`.cursor/rules/`、`.cursorrules`
@@ -67,12 +68,12 @@
 - `scripts/data/dump_bin.py` 使用 `fire` CLI
 - 输出目录包含 `calendars/ features/ instruments/ ...`
 
-### 2.4 训练 LightGBM（配置驱动主流程）
+### 2.4 训练当前 fused signal（配置驱动主流程）
 
-- `uv run python -m scripts.training.lgbm_workflow --config config.toml --experiment-profile cost_aware_main`
+- `uv run python -m scripts.training.fused_signal_workflow --config config.toml --experiment-profile regression_fused_main --prediction-output-dir reports/fused-signal-preds/regression_fused_main`
 
-当前 `cost_aware_main` 的实际含义：
-- `top23 + classification_72h_costaware(0.006) + rolling_2y_monthly + prob_conservative`
+当前最佳阶段的实际含义：
+- `top23 + regression_fused_main + rolling_24m_halflife_6m + score_regression_aggressive_v3_best`
 
 兼容旧参数模式（仅保留兼容，不作为研究主入口）：
 
@@ -88,15 +89,16 @@
 
 ### 2.6 运行配置驱动回测 / 扫描
 
-- `uv run python -m scripts.analysis.backtest_spot_strategy --pred-glob "/absolute/path/to/pred_*.pkl" --config config.toml --experiment-profile cost_aware_main`
+- `uv run python -m scripts.analysis.backtest_spot_strategy --pred-glob "reports/fused-signal-preds/regression_fused_main/pred_fused_2025*.pkl" --config config.toml --experiment-profile regression_fused_aggressive_v3_best --start-time "2025-01-01 00:00:00" --end-time "2025-12-31 23:00:00"`
+- `uv run python -m scripts.analysis.backtest_spot_strategy --pred-glob "reports/fused-signal-preds/regression_fused_main/pred_fused_2024*.pkl" --config config.toml --experiment-profile regression_fused_aggressive_v3_best --start-time "2024-01-01 00:00:00" --end-time "2024-12-31 23:00:00"`
 - `uv run python -m scripts.analysis.run_phase2_baseline --mlruns-root ./mlruns --config config.toml --experiment-profile regression_72h_main --year 2024 --scan`
 - `uv run python -m scripts.analysis.run_72h_trade_tuning --predictions-root reports/costaware-prob-preds --config config.toml --experiment-profile cost_aware_main --year 2024`
 - `uv run python -m scripts.analysis.run_cost_aware_label_round1 --predictions-root reports/costaware-preds --config config.toml --experiment-profile cost_aware_main --year 2025`
 
 当前最重要的结果文件：
-- `reports/cost-thr-006-2024/summary.json`
-- `reports/cost-thr-006-2025/summary.json`
-- `docs/research/2026-03-24-cost-aware-mainline-comparison.md`
+- `docs/research/2026-04-01-regression-fused-best-stage-summary.md`
+- `reports/score-scan-regression-fused-2025-v5-aggressive-focus/scan_2025.csv`
+- `reports/score-scan-regression-fused-2025-v5-aggressive-focus/top8_2024_validation.csv`
 
 ---
 
@@ -106,13 +108,13 @@
 
 - 未配置 pytest（未发现 `pytest.ini` / `conftest.py` / `pyproject` pytest 配置）
 - 当前测试主入口是标准库 `unittest`
-- 回测、配置、训练工作流相关测试已经覆盖主线
+- 回测、配置、训练、fused signal 和 score execution 相关测试已经覆盖当前主路径
 
-### 3.2 现有 smoke test（QLib 读数据）
+### 3.2 现有 smoke test（配置 / 训练 / fused / 回测）
 
-- `uv run python -m unittest tests.test_phase2_strategy_research tests.test_research_profiles tests.test_runtime_config tests.test_lgbm_workflow_config tests.test_analysis_entrypoints_config tests.test_probability_signal_strategy tests.test_backtest_spot_strategy -v`
+- `uv run python -m unittest tests.test_runtime_config tests.test_lgbm_workflow_config tests.test_time_decay_reweighter tests.test_signal_transform tests.test_fused_signal_workflow tests.test_continuous_position_mapping tests.test_backtest_spot_strategy tests.test_phase2_strategy_research tests.test_analysis_entrypoints_config tests.test_research_profiles -v`
 
-用途：验证当前主线的配置驱动训练、概率交易壳、扫描器和回测层。
+用途：验证当前最佳阶段的配置驱动训练、半衰期加权、fused workflow、连续仓位映射、扫描器和回测层。
 
 ### 3.3 若未来引入 pytest（建议的统一命令）
 
@@ -184,14 +186,16 @@
 - 研究配置真源：`./config.toml`
 - `nusri_project/config/alpha261_config.py` 因子名必须唯一（重复会 `raise ValueError("duplicate factor name")`）
 - 分类标签输出列使用 `pred_prob`；回归标签输出列使用 `pred_return`
-- 当前主线标签定义：
-  - `round_trip_cost = 0.002`
-  - `safety_margin = 0.004`
-  - `positive_threshold = 0.006`
+- fused / score 主路径输出列使用 `pred_score`
+- 当前最佳阶段信号定义：
+  - 组件：`regression_24h` 与 `regression_72h`
+  - 融合：`regression_fused_main`
+  - 权重训练：`rolling_24m_halflife_6m`
 - 分类交易层比较概率阈值：`enter_prob_threshold / exit_prob_threshold / full_prob_threshold`
 - 回归交易层比较收益阈值：`entry_threshold / exit_threshold / full_position_threshold`
-- 当前主线训练窗口保留 `rolling_2y_monthly`
-- `top15/top10`、`18m/1y`、`0.004/0.005` 等仅作为已完成的对比实验结论保留在 `docs/research/2026-03-24-cost-aware-mainline-comparison.md`，不再作为长期主线配置
+- score 交易层比较连续阈值：`open_score / close_score / size_floor_score / size_full_score / curve_gamma`
+- 当前最佳阶段训练窗口为 `rolling_24m_halflife_6m`
+- `top15/top10`、`18m/1y`、`0.004/0.005` 以及旧 `cost_aware_main` probability 主线仅作为已完成的对比实验结论保留在历史文档中，不再作为长期主线配置
 - 涉及策略回测、执行器、交易成本、组合分析时，先检查 `Qlib` 官方现成能力是否已覆盖，例如 `qlib.backtest.backtest`、`qlib.contrib.evaluate.backtest_daily`、`qlib.workflow.record_temp.PortAnaRecord`
 - 如果 `Qlib` 已有合适能力，优先通过配置、封装和对接现有接口实现；不要先手写一套平行回测框架
 - 只有在 `Qlib` 现成接口无法准确表达当前需求时，才允许补充自定义实现；并在代码或文档中明确说明缺口

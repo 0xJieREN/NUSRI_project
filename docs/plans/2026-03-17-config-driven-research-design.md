@@ -1,5 +1,7 @@
 # 配置驱动研究仓重构设计
 
+> **状态更新（2026-04-01）**：本设计文档保留为配置驱动重构阶段记录。当前仓库推荐阶段已更新为 `regression_fused_aggressive_v3_best`，详见 `docs/research/2026-04-01-regression-fused-best-stage-summary.md`。
+
 ## 目标
 
 将当前以脚本和分散默认值驱动的研究仓，重构为以单一配置真源驱动的研究仓。重构后：
@@ -343,16 +345,16 @@ de_risk_position = 0.0
 
 其他 profile 可先留在配置结构中，但不要求第一轮全部验证通过。
 
-## 当前推荐主线
+## 当前推荐阶段
 
-默认主线 profile 建议设置为：
+当前默认推荐阶段应理解为：
 
 - 数据：`btc_1h_full`
 - 因子：`top23`
-- 标签：`classification_72h_costaware`
-- 模型：`lgbm_binary_default`
-- 训练：`rolling_2y_monthly`
-- 交易：`prob_conservative`
-- 实验：`cost_aware_main`
+- 融合 profile：`regression_fused_main`
+- 模型：`lgbm_regression_default`
+- 训练：`rolling_24m_halflife_6m`
+- 交易：`score_regression_aggressive_v3_best`
+- 实验：`regression_fused_aggressive_v3_best`
 
-这能保证重构后的默认世界观与当前研究收敛结果一致。
+这能保证重构后的默认世界观与当前最佳阶段一致。

@@ -1,5 +1,7 @@
 # Spot Strategy Phase 2 Implementation Plan
 
+> **Status Update (2026-04-01):** This plan is kept as historical implementation context. The current recommended stage is `regression_fused_aggressive_v3_best`; see `docs/research/2026-04-01-regression-fused-best-stage-summary.md`.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Build the 2024 baseline strategy evaluation and parameter scan flow on top of the Qlib-first spot backtest layer.

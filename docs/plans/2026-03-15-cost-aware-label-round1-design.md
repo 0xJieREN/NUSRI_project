@@ -1,5 +1,7 @@
 # Cost-Aware Label Round 1 Design
 
+> **Status Update (2026-04-01):** This design is preserved as historical label-optimization context. The current recommended stage is `regression_fused_aggressive_v3_best`; see `docs/research/2026-04-01-regression-fused-best-stage-summary.md`.
+
 **Goal**
 
 Evaluate whether a `72h` cost-aware binary label can outperform the current `72h` regression label by reducing low-quality trades in the 2025 final backtest.

@@ -1,5 +1,7 @@
 # Config-Driven Research Refactor Implementation Plan
 
+> **Status Update (2026-04-01):** This plan is kept as historical implementation context. The current recommended stage is `regression_fused_aggressive_v3_best`; see `docs/research/2026-04-01-regression-fused-best-stage-summary.md`.
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Convert the repository into a config-driven research workflow with explicit separation between regression-signal trading and probability-signal trading, starting with a safe phase-1 foundation.

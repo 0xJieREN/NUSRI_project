@@ -1,5 +1,7 @@
 # Repository Reorganization Implementation Plan
 
+> **Status Update (2026-04-01):** This plan is kept as historical implementation context. The current recommended stage is `regression_fused_aggressive_v3_best`; see `docs/research/2026-04-01-regression-fused-best-stage-summary.md`.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Reorganize the repository into clearer functional areas, archive legacy artifacts, and update documentation so the new command surface is consistent.

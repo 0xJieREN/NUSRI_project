@@ -1,5 +1,7 @@
 # Cost-Aware Label Round 1 Implementation Plan
 
+> **Status Update (2026-04-01):** This plan is kept as historical implementation context. The current recommended stage is `regression_fused_aggressive_v3_best`; see `docs/research/2026-04-01-regression-fused-best-stage-summary.md`.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Add a `72h` cost-aware binary label mode and compare it against the current `72h` regression label under fixed trading shells.

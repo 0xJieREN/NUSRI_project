@@ -8,7 +8,11 @@
 
 - 训练、回测、扫描、标签比较都优先通过 `config.toml`
 - 通过 `--config` + `--experiment-profile` 选择实验组合
-- 回归信号与分类信号已经在交易层语义上明确分流
+- 回归信号、分类信号和 fused score 信号已经在交易层语义上明确分流
+
+当前最佳阶段总结：
+
+- `docs/research/2026-04-01-regression-fused-best-stage-summary.md`
 
 ## 配置文件
 
@@ -26,17 +30,18 @@
 - `[trading.*]`
 - `[experiments.*]`
 
-### 当前推荐主线
+### 当前推荐阶段
 
-当前默认主线建议理解为：
+当前默认推荐阶段建议理解为：
 
 - 数据：`btc_1h_full`
 - 因子：`top23`
-- 标签：`classification_72h_costaware`
-- 模型：`lgbm_binary_default`
-- 训练：`rolling_2y_monthly`
-- 交易：`prob_conservative`
-- 实验：`cost_aware_main`
+- 融合组件：`reg_24h + reg_72h`
+- 融合 profile：`regression_fused_main`
+- 模型：`lgbm_regression_default`
+- 训练：`rolling_24m_halflife_6m`
+- 交易：`score_regression_aggressive_v3_best`
+- 实验：`regression_fused_aggressive_v3_best`
 
 ## 标签与交易层语义
 
@@ -66,24 +71,49 @@
 - 分类信号直接走 `pred_prob`
 - 分类交易层直接比较概率阈值
 
+### score / fused 模式
+
+- 预测列：`pred_score`
+- 含义：
+  - 来自同类 horizon 组件融合后的连续分数
+- 交易阈值：
+  - `open_score`
+  - `close_score`
+  - `size_floor_score`
+  - `size_full_score`
+  - `curve_gamma`
+
 ## 常用命令
 
-### 训练
+### 训练当前 fused signal
 
 ```bash
-uv run python -m scripts.training.lgbm_workflow --config config.toml --experiment-profile cost_aware_main
+uv run python -m scripts.training.fused_signal_workflow --config config.toml --experiment-profile regression_fused_main --prediction-output-dir reports/fused-signal-preds/regression_fused_main
 ```
 
-### 现货回测
+### 现货回测当前最佳阶段（2025）
 
 ```bash
 uv run python -m scripts.analysis.backtest_spot_strategy \
-  --pred-glob "reports/costaware-preds/pred_classification_72h_costaware_72h_2025*.pkl" \
+  --pred-glob "reports/fused-signal-preds/regression_fused_main/pred_fused_2025*.pkl" \
   --config config.toml \
-  --experiment-profile cost_aware_main
+  --experiment-profile regression_fused_aggressive_v3_best \
+  --start-time "2025-01-01 00:00:00" \
+  --end-time "2025-12-31 23:00:00"
 ```
 
-### cost-aware round1 对比
+### 现货回测当前最佳阶段（2024 回看）
+
+```bash
+uv run python -m scripts.analysis.backtest_spot_strategy \
+  --pred-glob "reports/fused-signal-preds/regression_fused_main/pred_fused_2024*.pkl" \
+  --config config.toml \
+  --experiment-profile regression_fused_aggressive_v3_best \
+  --start-time "2024-01-01 00:00:00" \
+  --end-time "2024-12-31 23:00:00"
+```
+
+### 历史研究工具
 
 ```bash
 uv run python -m scripts.analysis.run_cost_aware_label_round1 \
@@ -92,11 +122,7 @@ uv run python -m scripts.analysis.run_cost_aware_label_round1 \
   --experiment-profile cost_aware_main \
   --year 2025 \
   --update-html
-```
 
-### 72h 交易层调参
-
-```bash
 uv run python -m scripts.analysis.run_72h_trade_tuning \
   --predictions-root reports/costaware-preds \
   --config config.toml \
@@ -135,6 +161,6 @@ uv run python -m scripts.analysis.run_phase2_baseline \
 
 当前剩余的收尾重点是：
 
-- 继续减少脚本内置研究默认值
-- 让更多扫描 profile 迁入 `config.toml`
-- 将 README 和代理说明完全改成配置驱动表述
+- 优先围绕 `regression_fused_aggressive_v3_best` 做更窄的执行层微调
+- 如果继续扩信号层，优先在 fused regression 分支内做更细的组件 / 权重研究
+- 把更多历史文档降级为“阶段记录”，避免再把旧 cost-aware 主线当作当前默认结论

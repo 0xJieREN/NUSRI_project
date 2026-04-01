@@ -1,5 +1,7 @@
 # 2026-03-31 Fused Signal Design
 
+> **状态更新（2026-04-01）**：本设计已经完成实现，且当前最佳阶段已经落在 `regression_fused_aggressive_v3_best`。本文件主要保留设计动机和接口边界，当前结果请参考 `docs/research/2026-04-01-regression-fused-best-stage-summary.md`。
+
 ## Goal
 
 在 `2025 max_drawdown <= 10%` 的约束下，尽量提高策略收益。当前优先级不再受旧主线约束，允许围绕 `2025` 直接优化，但仍保留基本稳定性护栏，避免只对单年偶然拟合。

@@ -1,5 +1,7 @@
 # Label Optimization Round 1 Implementation Plan
 
+> **Status Update (2026-04-01):** This plan is kept as historical implementation context. The current recommended stage is `regression_fused_aggressive_v3_best`; see `docs/research/2026-04-01-regression-fused-best-stage-summary.md`.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Add configurable `24h / 48h / 72h` regression labels and evaluate them under fixed spot trading shells.

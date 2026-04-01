@@ -1,8 +1,10 @@
 # 2026-03-24 Cost-Aware 主线对比实验总结
 
-## 当前主线
+> **状态更新（2026-04-01）**：本文件记录的是 `2026-03-24` 时点的 cost-aware 主线对比结论，现已被当前最佳阶段 `regression_fused_aggressive_v3_best` 取代。请优先参考 `docs/research/2026-04-01-regression-fused-best-stage-summary.md`。
 
-截至本轮实验，建议保留的唯一主线配置为：
+## 截至 2026-03-24 的主线
+
+截至 `2026-03-24` 这一轮实验，当时建议保留的主线配置为：
 
 - 数据频率：`1h`
 - 因子集：`top23`
@@ -12,7 +14,7 @@
 - 训练模式：`rolling_2y_monthly`
 - 交易壳：`prob_conservative`
 
-主线基线结果：
+当时主线基线结果：
 
 | year | annualized return | sharpe | max drawdown | turnover | exposure |
 |---|---:|---:|---:|---:|---:|
@@ -90,7 +92,7 @@
 
 ## 最终结论
 
-经过本轮对比实验，当前仓库建议保留的主线只有一条：
+经过 `2026-03-24` 这一轮对比实验，当时仓库建议保留的主线只有一条：
 
 - `top23`
 - `classification_72h_costaware`
