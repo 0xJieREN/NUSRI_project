@@ -90,7 +90,7 @@ uv run python -m scripts.analysis.backtest_spot_strategy \
 - `docs/research/2026-03-24-cost-aware-mainline-comparison.md`
 - `docs/research/2026-03-15-研究收敛备忘录.md`
 - `docs/plans/2026-03-24-cost-aware-optimization-experiment-plan.md`
-- `docs/superpowers/specs/2026-03-31-fused-signal-design.md`
-- `docs/superpowers/plans/2026-03-31-fused-signal-implementation-plan.md`
+- `docs/plans/2026-03-31-fused-signal-design.md`
+- `docs/plans/2026-03-31-fused-signal-implementation-plan.md`
 
 这些文档现在只保留历史背景、设计轨迹和实现记录的价值。
