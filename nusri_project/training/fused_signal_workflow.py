@@ -154,7 +154,7 @@ def _build_component_workflow_conf(
     handler_kwargs = dataset_kwargs["handler"]["kwargs"]
     handler_kwargs["start_time"] = data.start_time
     handler_kwargs["end_time"] = data.end_time
-    handler_kwargs["instruments"] = data.instrument
+    handler_kwargs["instruments"] = [data.instrument]
     handler_kwargs["data_loader"]["kwargs"]["freq"] = data.freq
     return workflow_conf
 

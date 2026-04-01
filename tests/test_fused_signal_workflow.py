@@ -18,6 +18,7 @@ from nusri_project.config.schemas import (
     TrainingConfig,
 )
 from nusri_project.training.fused_signal_workflow import (
+    _build_component_workflow_conf,
     fuse_component_predictions,
     run_fused_signal_workflow,
 )
@@ -220,6 +221,14 @@ class FusedSignalWorkflowTests(unittest.TestCase):
                 weights=(0.4, -0.4),
                 output_column="pred_score",
             )
+
+    def test_build_component_workflow_conf_uses_single_instrument_list(self) -> None:
+        runtime = self._runtime(cache_component_predictions=False)
+
+        workflow_conf = _build_component_workflow_conf(runtime.data, runtime.components[0])
+
+        handler_kwargs = workflow_conf["task"]["dataset"]["kwargs"]["handler"]["kwargs"]
+        self.assertEqual(handler_kwargs["instruments"], ["BTCUSDT"])
 
     def test_run_fused_signal_workflow_transforms_components_fuses_and_caches_artifacts(self) -> None:
         train_24h = pd.DataFrame(

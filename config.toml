@@ -157,6 +157,45 @@ cooldown_hours = 12
 drawdown_de_risk_threshold = 0.02
 de_risk_position = 0.0
 
+[trading.score_regression_aggressive_v1]
+signal_kind = "score"
+open_score = 0.40
+close_score = 0.05
+size_floor_score = 0.40
+size_full_score = 0.80
+curve_gamma = 1.0
+max_position = 0.50
+min_holding_hours = 48
+cooldown_hours = 12
+drawdown_de_risk_threshold = 0.02
+de_risk_position = 0.0
+
+[trading.score_regression_aggressive_v2_max]
+signal_kind = "score"
+open_score = 0.40
+close_score = 0.00
+size_floor_score = 0.40
+size_full_score = 0.65
+curve_gamma = 1.0
+max_position = 0.75
+min_holding_hours = 48
+cooldown_hours = 12
+drawdown_de_risk_threshold = 0.02
+de_risk_position = 0.0
+
+[trading.score_regression_aggressive_v2_balanced]
+signal_kind = "score"
+open_score = 0.45
+close_score = 0.00
+size_floor_score = 0.45
+size_full_score = 0.65
+curve_gamma = 0.75
+max_position = 0.75
+min_holding_hours = 48
+cooldown_hours = 12
+drawdown_de_risk_threshold = 0.02
+de_risk_position = 0.0
+
 [experiments.cost_aware_main]
 data_profile = "btc_1h_full"
 factor_profile = "top23"
@@ -180,6 +219,33 @@ label_profile = "regression_72h"
 model_profile = "lgbm_regression_default"
 training_profile = "rolling_24m_halflife_6m"
 trade_profile = "score_conservative"
+fusion_profile = "regression_fused_main"
+
+[experiments.regression_fused_aggressive_v1]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "regression_72h"
+model_profile = "lgbm_regression_default"
+training_profile = "rolling_24m_halflife_6m"
+trade_profile = "score_regression_aggressive_v1"
+fusion_profile = "regression_fused_main"
+
+[experiments.regression_fused_aggressive_v2_max]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "regression_72h"
+model_profile = "lgbm_regression_default"
+training_profile = "rolling_24m_halflife_6m"
+trade_profile = "score_regression_aggressive_v2_max"
+fusion_profile = "regression_fused_main"
+
+[experiments.regression_fused_aggressive_v2_balanced]
+data_profile = "btc_1h_full"
+factor_profile = "top23"
+label_profile = "regression_72h"
+model_profile = "lgbm_regression_default"
+training_profile = "rolling_24m_halflife_6m"
+trade_profile = "score_regression_aggressive_v2_balanced"
 fusion_profile = "regression_fused_main"
 
 [experiments.costaware_fused_main]
